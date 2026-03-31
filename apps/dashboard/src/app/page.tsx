@@ -51,6 +51,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     // 1. Fetch Labels from Firestore (Multi-tenant: /boxes/{deviceId}/relays)
+    // Só tenta ler do banco se 'db' foi inicializado com chaves válidas
+    if (!db) {
+       console.log("Firebase Database não inicializado. Usando nomes padrões.");
+       setRelays(INITIAL_RELAYS);
+       return () => {}; 
+    }
+
     const relaysRef = collection(db, 'boxes', deviceId, 'relays');
     const q = query(relaysRef, orderBy('id', 'asc'));
     
