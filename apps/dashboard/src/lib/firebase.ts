@@ -12,8 +12,15 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
-const auth = getAuth(app);
+let db: any;
+let auth: any;
+
+if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "AIzaSy...") {
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  db = getFirestore(app);
+  auth = getAuth(app);
+} else {
+  console.warn("Firebase: API Key ausente ou inválida. O banco de dados não será inicializado.");
+}
 
 export { db, auth };

@@ -44,12 +44,32 @@ Para manter a compatibilidade com a rotina anterior do Firebase:
 
 ---
 
+### [2026-03-31] - Arquitetura v2.0 & Publicação Global
+- **Firmware ESP32-C3 (v2.0)**:
+  - **Eficiência e Estabilidade**: WiFi configurado com rádio sempre ativo e reconexão automática.
+  - **Sincronização de IP**: O dispositivo agora informa seu IP local automaticamente via MQTT.
+  - **Portal de Gestão**: Recuperadas as páginas de IP Fixo, Reset de Fábrica e Login Seguro local.
+  - **Sincronia de Queda de Energia**: Delay de 70s garantindo o boot do roteador antes do ESP32.
+- **Ambiente de Nuvem**:
+  - **GitHub**: Novo repositório `ElysonAragao/SmartAutomation` sincronizado.
+  - **Vercel**: Deploy global funcional com suporte a CI/CD e TLS Seguro (HiveMQ Cloud).
+  - **Build Safe**: Código otimizado para não quebrar durante a exportação na Vercel se chaves de ambiente estiverem ausentes.
+
+---
+
+## 🛠️ Procedimento de Trabalho: Favicon no ESP32
+Para manter a compatibilidade com a rotina anterior do Firebase:
+1. O arquivo `Favicon.h` contém o código hexadecimal completo do ícone.
+2. Basta copiar o conteúdo deste arquivo para o seu projeto no Arduino IDE.
+3. O código principal já faz a chamada automática para servir o ícone no navegador.
+
+---
+
 ## 🛠️ Em Andamento
-- **Lógica de Agendamento**: Desenvolvendo interface para salvar agendamentos diários diretamente no documento da caixa no Firestore.
+- **Histórico de Sensores**: Configurar a gravação de logs de temperatura por caixa no Firestore.
 
 ---
 
 ## 📝 Próximas Etapas
-1. [ ] **Validar Hardware**: Carregar o novo firmware com tópicos dinâmicos no ESP32-C3 e testar comandos via Dashboard.
-2. [ ] **Implementar Agendamentos**: Criar a lógica que salva horários de ativação automática no Firestore.
-3. [ ] **Histórico de Sensores**: Configurar a gravação de logs de temperatura por caixa no Firestore.
+1. [ ] **Gráficos em Tempo Real**: Implementar visualização de temperatura histórica no Dashboard.
+2. [ ] **Notificações PWA**: Configurar o Dashboard para funcionar como App no celular com notificações de status.
