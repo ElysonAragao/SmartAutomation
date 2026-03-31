@@ -82,9 +82,16 @@ export default function Dashboard() {
     });
 
     // 2. Setup MQTT Connection (Usando variáveis de ambiente)
-    const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL || 'ws://broker.hivemq.com:8000/mqtt';
+    const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL;
     const mqttUser = process.env.NEXT_PUBLIC_MQTT_USER;
     const mqttPass = process.env.NEXT_PUBLIC_MQTT_PASS;
+
+    // Se o MQTT URL não estiver presente (ex: durante o build na Vercel), não inicializa para evitar erros
+    if (!mqttUrl) {
+      console.log("Aguardando configuração de MQTT nas variáveis de ambiente da Vercel...");
+      setIsBrokerConnected(false);
+      return () => unsubscribeFirestore();
+    }
 
     const client = mqtt.connect(mqttUrl, {
       clientId: `nextjs_dash_${Math.random().toString(16).substring(2, 10)}`,
