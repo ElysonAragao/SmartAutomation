@@ -3,7 +3,6 @@
 import React from 'react';
 import { 
   Cloud, 
-  Infographic, 
   Terminal, 
   ShieldCheck, 
   Copy, 
