@@ -1,6 +1,6 @@
 /*
-  SmartAutomation Control - Firmware para ESP32-C3 (VERSÃO MASTER FINAL)
-  Dashboard Antigravity v2.0 - Controle Total (Local + MQTT)
+  SmartAutomation - v2.8 (FINAL STABLE VERSION)
+  Fluxo WiFiManager + MQTT Privado SSL + Dashboard Premium
 */
 
 #include <WiFi.h>
@@ -8,215 +8,138 @@
 #include <WiFiManager.h>
 #include <WebServer.h>
 #include <Preferences.h>
-#include <ESPmDNS.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
 
 // =========================
-// CONFIGURAÇÕES DE REDE
+// CONFIGURAÇÕES
 // =========================
 const char* DEVICE_ID = "Cx-0002"; 
-
-bool usarIPFixo = false;
-IPAddress local_IP(192, 168, 1, 50);
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 255, 0);
-IPAddress primaryDNS(8, 8, 8, 8);
-IPAddress secondaryDNS(8, 8, 4, 4);
-
-// =========================
-// CONFIGURAÇÃO INTERRUPTORES
-// =========================
 const int RELAY_COUNT = 8;
 const int RELE_MODE = 1; 
 int RELE_ON, RELE_OFF;
-
 const int RELE_PINS[RELAY_COUNT] = {0, 1, 3, 5, 8, 10, 20, 21};
 bool releState[RELAY_COUNT] = {false};
 bool releTemporizado[RELAY_COUNT] = {false};
 unsigned long tempoInicio[RELAY_COUNT] = {0};
 unsigned long tempoDuracao[RELAY_COUNT] = {0};
 
-// =========================
-// SENSOR DHT
-// =========================
 float temperatura = 0.0;
-#define DHTPIN 4
-#define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+DHT dht(4, DHT11);
 
-// =========================
-// NTP
-// =========================
-const long GMT_OFFSET_SEC = -10800; 
-const int DAYLIGHT_OFFSET_SEC = 0;
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC);
-
-const char* daysOfWeek[] = {"Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"};
-
-// =========================
-// PERSISTÊNCIA
-// =========================
-WebServer server(80);
-Preferences prefs;
-
-// =========================
-// MQTT
-// =========================
+// DADOS DO SEU CLUSTER PRIVADO
 const char* mqtt_server = "9fa62893736646bc9986ee92847d588d.s1.eu.hivemq.cloud";
-String mqtt_user   = "Orientar_Engenharia"; 
-String mqtt_pass   = "Casario4\\orientareng";   
-
-char TOPIC_COMANDO[100];
-char TOPIC_STATUS[100];
+const char* mqtt_user   = "Orientar_Engenharia"; 
+const char* mqtt_pass   = "Casario4\\orientareng";   
 
 WiFiClientSecure espClient; 
 PubSubClient client(espClient);
+WebServer server(80);
+Preferences prefs;
+
+const char* ADMIN_U = "esa";
+const char* ADMIN_P = "esa123";
+bool logado = false;
 
 // =========================
-// AUTENTICAÇÃO WEB
+// LÓGICA E MQTT
 // =========================
-const char* ADMIN_USER     = "esa";
-const char* ADMIN_PASSWORD = "esa123";
-bool usuarioAutenticado = false;
+void setupReleMode() { if (RELE_MODE == 1) { RELE_ON = LOW; RELE_OFF = HIGH; } else { RELE_ON = HIGH; RELE_OFF = LOW; } }
 
-// =========================
-// LÓGICA DE CONTROLE
-// =========================
-void setupReleMode() {
-  if (RELE_MODE == 1) { RELE_ON = LOW; RELE_OFF = HIGH; }
-  else { RELE_ON = HIGH; RELE_OFF = LOW; }
-}
+void salvar() { prefs.begin("reles", false); for(int i=0; i<8; i++) prefs.putBool(String("r"+String(i)).c_str(), releState[i]); prefs.end(); }
 
-void salvarEstados() {
-  prefs.begin("reles", false);
-  for (int i = 0; i < RELAY_COUNT; i++) { prefs.putBool(String("r" + String(i)).c_str(), releState[i]); }
-  prefs.end();
-}
-
-void carregarEstados() {
-  prefs.begin("reles", true);
-  for (int i = 0; i < RELAY_COUNT; i++) {
-    releState[i] = prefs.getBool(String("r" + String(i)).c_str(), false);
-    pinMode(RELE_PINS[i], OUTPUT);
-    digitalWrite(RELE_PINS[i], releState[i] ? RELE_ON : RELE_OFF);
-  }
-  prefs.end();
-}
-
-void setReleState(int i, bool state, unsigned long t_seconds = 0) {
-  if (i < 0 || i >= RELAY_COUNT) return;
-  if (state && t_seconds > 0) {
-      digitalWrite(RELE_PINS[i], RELE_ON);
-      releState[i] = true;
-      releTemporizado[i] = true;
-      tempoInicio[i] = millis();
-      tempoDuracao[i] = t_seconds * 1000UL;
-  } else {
-      releState[i] = state;
-      digitalWrite(RELE_PINS[i], state ? RELE_ON : RELE_OFF);
-      releTemporizado[i] = false;
-  }
-  salvarEstados();
-}
-
-void setAllRele(bool state) {
-  for (int i = 0; i < RELAY_COUNT; i++) {
-    releState[i] = state; digitalWrite(RELE_PINS[i], state ? RELE_ON : RELE_OFF);
-    releTemporizado[i] = false;
-  }
-  salvarEstados();
-}
-
-// =========================
-// FUNÇÕES MQTT
-// =========================
-void publishStatus() {
-  StaticJsonDocument<2048> doc;
+void publish() {
+  StaticJsonDocument<512> doc;
   JsonArray reles = doc.createNestedArray("reles");
-  for (int i = 0; i < RELAY_COUNT; i++) { reles.add(releState[i]); }
-  doc["temperatura"] = temperatura;
-  doc["id"] = DEVICE_ID;
-  doc["ip"] = WiFi.localIP().toString();
-
-  char buffer[2048];
-  serializeJson(doc, buffer);
-  client.publish(TOPIC_STATUS, buffer);
+  for(int i=0; i<8; i++) reles.add(releState[i]);
+  doc["id"] = DEVICE_ID; doc["ip"] = WiFi.localIP().toString(); doc["temperatura"] = temperatura;
+  char b[512]; serializeJson(doc, b);
+  client.publish("esp32/Cx-0002/status/rele", b);
 }
 
-void callbackMQTT(char* topic, byte* payload, unsigned int length) {
-  StaticJsonDocument<1024> doc;
-  deserializeJson(doc, payload, length);
-  bool statusUpdate = false;
-
-  if (doc.containsKey("id") && doc.containsKey("action")) {
-      int idx = doc["id"].as<int>() - 1;
-      String act = doc["action"].as<String>();
-      unsigned long t = doc.containsKey("tempo") ? doc["tempo"].as<unsigned long>() : 0;
-      setReleState(idx, act == "on", t);
-      statusUpdate = true;
-  } else if (doc.containsKey("all")) {
-      setAllRele(doc["all"].as<bool>());
-      statusUpdate = true;
-  }
-
-  if (doc.containsKey("request") && strcmp(doc["request"], "status") == 0) { statusUpdate = true; }
-  if (statusUpdate) publishStatus();
+void setRele(int i, bool st, unsigned long t=0) {
+  if (i<0 || i>=8) return;
+  digitalWrite(RELE_PINS[i], st ? RELE_ON : RELE_OFF);
+  releState[i] = st;
+  if(st && t > 0) { releTemporizado[i]=true; tempoInicio[i]=millis(); tempoDuracao[i]=t*1000UL; }
+  else releTemporizado[i]=false;
+  salvar();
 }
 
-void reconnectMQTT() {
-  while (!client.connected()) {
-    if (client.connect(DEVICE_ID, mqtt_user.c_str(), mqtt_pass.c_str())) {
-      client.subscribe(TOPIC_COMANDO);
-      publishStatus();
-    } else { delay(2000); }
+void reconnect() {
+  if (!client.connected()) {
+    Serial.print("Connecting MQTT...");
+    if (client.connect(DEVICE_ID, mqtt_user, mqtt_pass)) {
+      Serial.println("OK");
+      client.subscribe("esp32/Cx-0002/comando/rele");
+      publish();
+    } else { Serial.printf("Fail %d\n", client.state()); delay(5000); }
   }
 }
 
 // =========================
-// PORTAL WEB COMPLETO
+// WEB PORTAL
 // =========================
-String getDashboardPage() {
-  String html = R"rawliteral(<!DOCTYPE html><html><head><meta charset='utf-8'><title>LuminaWeb</title><style>body{font-family:sans-serif;background:#0f172a;color:white;text-align:center;padding:20px;}.card{background:#1e293b;padding:20px;border-radius:20px;display:inline-block;margin:10px;width:250px;border:1px solid #334155;}.btn{display:block;padding:12px;background:#6366f1;color:white;text-decoration:none;border-radius:10px;font-weight:bold;margin-top:10px;}.btn-red{background:#ef4444;}.btn-gray{background:#475569;}</style></head><body><h1>LuminaWeb Dashboard</h1><p>IP: )rawliteral";
-  html += WiFi.localIP().toString();
-  html += R"rawliteral( | Temp: )rawliteral";
-  html += String(temperatura, 1);
-  html += R"rawliteral( C</p><hr style='opacity:0.2;'>)rawliteral";
-  for (int i = 0; i < RELAY_COUNT; i++) {
-    html += "<div class='card'><b>R" + String(i + 1) + "</b><br><a href='/cmd?i=" + String(i + 1) + "' class='btn " + (releState[i] ? "btn-red" : "") + "'>" + (releState[i] ? "OFF" : "ON") + "</a></div>";
+void handleRoot() {
+  if (!logado) { 
+    String loginHtml = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{background:#020617;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}form{background:#0f172a;padding:2rem;border-radius:1rem;border:1px solid #1e293b;width:300px}input{width:100%;margin:10px 0;padding:10px;background:#1e293b;border:1px solid #334155;color:white;border-radius:0.5rem}button{width:100%;padding:10px;background:#4f46e5;color:white;border:none;border-radius:0.5rem;cursor:pointer;font-weight:bold}</style></head><body><form method='POST' action='/login'><h2>SmartAutomation</h2><input name='u' placeholder='Usuário'><input name='p' type='password' placeholder='Senha'><button>Entrar</button></form></body></html>";
+    server.send(200, "text/html", loginHtml); 
+    return; 
   }
-  html += "<div style='margin-top:30px;'><a href='/configwifi' class='btn-gray btn'>CONFIGURAR REDE / IP FIXO</a><a href='/resetEsp' class='btn-gray btn'>REINICIAR ESP32</a><a href='/resetwifi' class='btn-red btn'>LIMPAR WI-FI (RESET)</a></div></body></html>";
-  return html;
+
+  String h = "<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><style>";
+  h += "body{background:#020617;color:#f8fafc;font-family:sans-serif;margin:0;display:flex;flex-direction:column;align-items:center;padding:2rem}";
+  h += ".card{background:#0f172a;border:1px solid #1e293b;border-radius:1.5rem;padding:2rem;width:100%;max-width:500px;text-align:center;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5)}";
+  h += "table{width:100%;margin:20px 0;border-collapse:collapse}td{padding:12px;border-bottom:1px solid #1e293b}";
+  h += ".btn{display:inline-block;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px;transition:0.3s;margin:2px}";
+  h += ".btn-on{background:#059669;color:white}.btn-off{background:#dc2626;color:white}.btn-timer{background:#4f46e5;color:white}.btn-danger{background:#991b1b;color:white}.btn-sec{background:#334155;color:white}.btn-cfg{background:#ca8a04;color:white}";
+  h += "input[type=number]{background:#1e293b;border:1px solid #334155;color:white;padding:5px;border-radius:4px;width:60px;margin-right:5px}";
+  h += "h1{margin-top:0;font-size:24px}p{color:#64748b;font-size:14px}";
+  h += "</style><script>function conf(msg, url){if(confirm(msg))location.href=url;} function timerCmd(i){let val=document.getElementById('t'+i).value; if(val>0) location.href='/cmd?i='+i+'&t='+val;}</script></head><body>";
+  h += "<div class='card'><h1>SmartAutomation</h1><p>IP Local: " + WiFi.localIP().toString() + "</p><p>Temperatura: " + String(temperatura,1) + " C</p><table>";
+  
+  for(int i=0; i<8; i++) {
+    h += "<tr><td align='left'><b>Relé " + String(i+1) + "</b></td><td align='right'>";
+    h += "<a href='/cmd?i=" + String(i+1) + "' class='btn " + String(releState[i] ? "btn-off" : "btn-on") + "'>" + (releState[i] ? "OFF" : "ON") + "</a>";
+    h += "<br><input type='number' id='t" + String(i+1) + "' value='10' min='1'><a href='#' class='btn btn-timer' onclick='timerCmd(" + String(i+1) + ")'>SET</a></td></tr>";
+  }
+  
+  h += "</table><div style='margin-bottom:20px'><a href='/cmd?all=1' class='btn btn-on'>Ligar Tudo</a>";
+  h += "<a href='/cmd?all=0' class='btn btn-off'>Desliga Tudo</a></div><hr style='border:0;border-top:1px solid #1e293b;margin:20px 0'>";
+  h += "<a href='/config' class='btn btn-cfg'>Configurar IP</a>";
+  h += "<a href='#' class='btn btn-sec' onclick=\"conf('Reiniciar o ESP32 agora?', '/reboot')\">Reiniciar ESP32</a>";
+  h += "<a href='#' class='btn btn-danger' onclick=\"conf('ATENÇÃO: Deseja apagar as credenciais de Wi-Fi? O ESP32 entrará em Modo AP novamente.', '/res')\">Reset Wi-Fi</a>";
+  h += "<br><br><a href='/logout' style='color:#64748b;text-decoration:none;font-size:12px'>Sair</a></div></body></html>";
+  server.send(200, "text/html", h);
 }
 
-void handleRoot() { if (!usuarioAutenticado) server.send(200, "text/html", R"rawliteral(<!DOCTYPE html><html><head><meta charset='utf-8'><title>Login</title><style>body{font-family:sans-serif;text-align:center;background:#0f172a;color:white;margin-top:100px;}input{padding:12px;margin:5px;border-radius:8px;}button{padding:12px 30px;background:#6366f1;color:white;border:none;border-radius:10px;}</style></head><body><h2>Acesso LuminaWeb</h2><form method='POST' action='/login'><input type='text' name='u' placeholder='Usuario'><br><input type='password' name='p' placeholder='Senha'><br><button type='submit'>Entrar</button></form></body></html>)rawliteral"); else server.send(200, "text/html", getDashboardPage()); }
+void handleConfig() {
+  if (!logado) { server.send(401); return; }
+  prefs.begin("config", true);
+  String ip = prefs.getString("ip", "");
+  String gw = prefs.getString("gw", "");
+  String sn = prefs.getString("sn", "");
+  prefs.end();
 
-void handleLogin() { if (server.arg("u") == ADMIN_USER && server.arg("p") == ADMIN_PASSWORD) { usuarioAutenticado = true; server.sendHeader("Location", "/", true); server.send(303); } else server.send(401, "text/plain", "Negado"); }
-
-void handleCmd() { if (!usuarioAutenticado) return server.send(401); int idx = server.arg("i").toInt() - 1; setReleState(idx, !releState[idx]); server.sendHeader("Location", "/", true); server.send(303); publishStatus(); }
-
-void handleConfigWiFi() {
-  if (!usuarioAutenticado) return server.send(401);
-  String html = "<html><body style='font-family:sans-serif; text-align:center;'><h2>Configuracao de Endereco IP</h2><form method='POST' action='/saveconfig'>";
-  html += "IP Atual: <input type='text' name='ip' value='" + WiFi.localIP().toString() + "'><br>";
-  html += "Gateway: <input type='text' name='gw' value='" + WiFi.gatewayIP().toString() + "'><br>";
-  html += "Subnet: <input type='text' name='sn' value='" + WiFi.subnetMask().toString() + "'><br>";
-  html += "<br><button type='submit'>SALVAR IP FIXO</button></form><br><a href='/'>VOLTAR</a></body></html>";
-  server.send(200, "text/html", html);
+  String h = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{background:#020617;color:white;font-family:sans-serif;padding:2rem;display:flex;justify-content:center} .card{background:#0f172a;padding:2rem;border-radius:1rem;width:100%;max-width:400px} input{width:100%;padding:10px;margin:10px 0;background:#1e293b;border:1px solid #334155;color:white;border-radius:0.5rem} .btn{width:100%;padding:10px;background:#ca8a04;color:white;border:none;border-radius:0.5rem;cursor:pointer;font-weight:bold;display:block;text-align:center;text-decoration:none;margin-top:10px}</style></head><body><div class='card'><h2>Configurar IP Fixo</h2><form method='POST' action='/savecfg'>";
+  h += "IP: <input name='ip' value='" + ip + "' placeholder='Ex: 192.168.3.200'>";
+  h += "Gateway: <input name='gw' value='" + gw + "' placeholder='Ex: 192.168.3.1'>";
+  h += "Subnet: <input name='sn' value='" + sn + "' placeholder='Ex: 255.255.255.0'>";
+  h += "<button class='btn'>Salvar e Reiniciar</button><br><a href='/' class='btn' style='background:#334155'>Voltar</a></form></div></body></html>";
+  server.send(200, "text/html", h);
 }
 
-void handleSaveConfig() {
-  if (!usuarioAutenticado) return server.send(401);
-  local_IP.fromString(server.arg("ip"));
-  gateway.fromString(server.arg("gw"));
-  subnet.fromString(server.arg("sn"));
-  usarIPFixo = true;
-  server.send(200, "text/plain", "IP Salvo. Reiniciando...");
-  delay(1000); ESP.restart();
+void handleSaveCfg() {
+  if (!logado) { server.send(401); return; }
+  prefs.begin("config", false);
+  prefs.putString("ip", server.arg("ip"));
+  prefs.putString("gw", server.arg("gw"));
+  prefs.putString("sn", server.arg("sn"));
+  prefs.end();
+  server.send(200, "text/html", "Salvo! Reiniciando...");
+  delay(2000);
+  ESP.restart();
 }
 
 // =========================
@@ -224,42 +147,75 @@ void handleSaveConfig() {
 // =========================
 void setup() {
   Serial.begin(115200);
-  for (int i = 70; i > 0; i--) { delay(1000); }
-
-  setupReleMode(); carregarEstados(); dht.begin();
+  delay(1000);
+  Serial.println("\n--- ESP32 INICIADO ---");
+  for (int i = 70; i > 0; i--) { if(i%10 == 0) Serial.printf("Delay: %d s\n", i); delay(1000); }
   
-  snprintf(TOPIC_COMANDO, sizeof(TOPIC_COMANDO), "esp32/%s/comando/rele", DEVICE_ID);
-  snprintf(TOPIC_STATUS, sizeof(TOPIC_STATUS), "esp32/%s/status/rele", DEVICE_ID);
+  setupReleMode(); 
+  
+  // Carrega IP Fixo se existir
+  prefs.begin("config", true);
+  if(prefs.isKey("ip") && prefs.getString("ip") != "") {
+    IPAddress local_IP, gateway, subnet;
+    local_IP.fromString(prefs.getString("ip"));
+    gateway.fromString(prefs.getString("gw"));
+    subnet.fromString(prefs.getString("sn"));
+    WiFi.config(local_IP, gateway, subnet);
+    Serial.println("Usando IP Fixo: " + prefs.getString("ip"));
+  }
+  prefs.end();
 
-  espClient.setInsecure(); client.setServer(mqtt_server, 8883); client.setCallback(callbackMQTT);
+  prefs.begin("reles", true);
+  for(int i=0; i<8; i++) {
+    releState[i] = prefs.getBool(String("r"+String(i)).c_str(), false);
+    pinMode(RELE_PINS[i], OUTPUT);
+    digitalWrite(RELE_PINS[i], releState[i] ? RELE_ON : RELE_OFF);
+  }
+  prefs.end();
+  dht.begin();
+
+  espClient.setInsecure();
+  client.setServer(mqtt_server, 8883);
+  client.setCallback([](char* tc, byte* py, unsigned int l){
+    StaticJsonDocument<256> d; deserializeJson(d, py, l);
+    if(d.containsKey("id")){ int i=d["id"].as<int>()-1; setRele(i, d["action"].as<String>()=="on", d.containsKey("tempo")?d["tempo"].as<int>():0); }
+    else if(d.containsKey("all")){ bool s=d["all"].as<bool>(); for(int j=0; j<8; j++) setRele(j,s); }
+    publish();
+  });
 
   WiFiManager wm;
+  wm.setConnectTimeout(60);
   if (!wm.autoConnect("ESP-SmartAutomation-Config", "12345678")) { ESP.restart(); }
 
-  timeClient.begin();
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/login", HTTP_POST, handleLogin);
-  server.on("/cmd", HTTP_GET, handleCmd);
-  server.on("/configwifi", HTTP_GET, handleConfigWiFi);
-  server.on("/saveconfig", HTTP_POST, handleSaveConfig);
-  server.on("/resetwifi", HTTP_GET, [](){ WiFiManager wm; wm.resetSettings(); ESP.restart(); });
-  server.on("/resetEsp", HTTP_GET, [](){ ESP.restart(); });
+  // Estabilidade Máxima de WiFi (Pedida pelo Usuário)
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
+
+  server.on("/", handleRoot);
+  server.on("/config", handleConfig);
+  server.on("/savecfg", HTTP_POST, handleSaveCfg);
+  server.on("/login", HTTP_POST, [](){ if(server.arg("u")==ADMIN_U && server.arg("p")==ADMIN_P){ logado=true; server.sendHeader("Location","/"); server.send(303); } else server.send(401); });
+  server.on("/logout", [](){ logado=false; server.sendHeader("Location","/"); server.send(303); });
+  server.on("/reboot", [](){ if(!logado) return server.send(401); server.send(200, "text/html", "Reiniciando..."); delay(1000); ESP.restart(); });
+  server.on("/res", [](){ if(!logado) return server.send(401); WiFiManager wm; wm.resetSettings(); ESP.restart(); });
+  server.on("/cmd", [](){
+      if(!logado) return server.send(401);
+      if(server.hasArg("all")) { bool s=server.arg("all")=="1"; for(int j=0; j<8; j++) setRele(j,s); }
+      else { int i=server.arg("i").toInt()-1; int t=server.hasArg("t")?server.arg("t").toInt():0; setRele(i, t>0?true:!releState[i], t); }
+      publish(); server.sendHeader("Location","/"); server.send(303);
+  });
   server.begin();
+  Serial.println("System Running!");
 }
 
 void loop() {
   server.handleClient();
   if (WiFi.status() == WL_CONNECTED) {
-    if (!client.connected()) reconnectMQTT();
+    if (!client.connected()) reconnect();
     client.loop();
   }
-
   static unsigned long lT = 0;
-  if(millis() - lT > 30000) { temperatura = dht.readTemperature(); lT = millis(); publishStatus(); }
-
-  for (int i = 0; i < RELAY_COUNT; i++) {
-    if (releTemporizado[i] && millis() - tempoInicio[i] >= tempoDuracao[i]) {
-      setReleState(i, false); publishStatus();
-    }
-  }
+  if(millis() - lT > 30000) { temperatura = dht.readTemperature(); lT = millis(); if(client.connected()) publish(); }
+  for (int i = 0; i < 8; i++) { if (releTemporizado[i] && millis()-tempoInicio[i] >= tempoDuracao[i]) { setRele(i, false); if(client.connected()) publish(); } }
 }

@@ -40,12 +40,12 @@ const INITIAL_RELAYS = [
 export default function Dashboard() {
   const [relays, setRelays] = useState(INITIAL_RELAYS);
   const [temp, setTemp] = useState(24.5);
-  const [isBrokerConnected, setIsBrokerConnected] = useState(true);
-  const [isDeviceOnline, setIsDeviceOnline] = useState(true);
+  const [isBrokerConnected, setIsBrokerConnected] = useState(false);
+  const [isDeviceOnline, setIsDeviceOnline] = useState(false);
   const [loadingRelayId, setLoadingRelayId] = useState<number | null>(null);
-  const [deviceId, setDeviceId] = useState('Cx-0001'); // Current Box ID
-  const [inputDeviceId, setInputDeviceId] = useState('Cx-0001'); // Buffered input value
-  const [deviceIp, setDeviceIp] = useState('192.168.3.41'); // State matching your current central
+  const [deviceId, setDeviceId] = useState('Cx-0002'); // Current Box ID
+  const [inputDeviceId, setInputDeviceId] = useState('Cx-0002'); // Buffered input value
+  const [deviceIp, setDeviceIp] = useState('...'); // Reiniciando vazio como solicitado
 
   const [mqttClient, setMqttClient] = useState<any>(null);
 
@@ -53,40 +53,35 @@ export default function Dashboard() {
     // 1. Fetch Labels from Firestore (Multi-tenant: /boxes/{deviceId}/relays)
     // Só tenta ler do banco se 'db' foi inicializado com chaves válidas
     if (!db) {
-       console.log("Firebase Database não inicializado. Usando nomes padrões.");
+       console.log("⚠️ Firebase não disponível. Operando apenas via MQTT.");
        setRelays(INITIAL_RELAYS);
-       return () => {}; 
     }
 
-    const relaysRef = collection(db, 'boxes', deviceId, 'relays');
-    const q = query(relaysRef, orderBy('id', 'asc'));
-    
-    // Reset para mock data ao trocar de caixa para evitar ver labels da caixa anterior enquanto carrega
-    setRelays(INITIAL_RELAYS);
+    if (db) {
+       const relaysRef = collection(db, 'boxes', deviceId, 'relays');
+       const q = query(relaysRef, orderBy('id', 'asc'));
+       
+       setRelays(INITIAL_RELAYS);
 
-    const unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        ...doc.data()
-      })) as any[];
-      
-      if (data.length > 0) {
-        setRelays(prev => {
-           // Mescla o estado local is_on com os labels do banco
-           return data.map(dbRelay => {
-              const current = prev.find(r => r.id === dbRelay.id);
-              // Mantemos o estado de ligado/desligado local (que vem do MQTT) 
-              // mas usamos o label que vem do Firestore
-              return { 
-                ...dbRelay, 
-                is_on: current ? current.is_on : false 
-              };
+       const unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+         const data = snapshot.docs.map(doc => ({
+           ...doc.data()
+         })) as any[];
+         
+         if (data.length > 0) {
+           setRelays(prev => {
+              return data.map(dbRelay => {
+                 const current = prev.find(r => r.id === dbRelay.id);
+                 return { ...dbRelay, is_on: current ? current.is_on : false };
+              });
            });
-        });
-      } else {
-        console.log(`Caixa ${deviceId} não possui dados no Firestore. Usando padrões.`);
-        setRelays(INITIAL_RELAYS);
-      }
-    });
+         } else {
+           console.log(`Caixa ${deviceId} não possui dados no Firestore. Usando padrões.`);
+           setRelays(INITIAL_RELAYS);
+         }
+       });
+    }
+    const unsubscribeFirestore = () => {}; 
 
     // 2. Setup MQTT Connection (Usando variáveis de ambiente)
     const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL;
@@ -112,9 +107,11 @@ export default function Dashboard() {
       console.log(`✅ Conectado ao HiveMQ! Monitorando: ${deviceId}`);
       setIsBrokerConnected(true);
       
-      // Subscribe to status updates for this specific box
-      client.subscribe(`esp32/${deviceId}/status/#`);
-      client.subscribe(`esp32/status/rele`); 
+      // Subscribe explicitly
+      const statusTopic = `esp32/${deviceId}/status/#`;
+      client.subscribe(statusTopic, (err) => {
+         if (!err) console.log(`📡 Inscrito com sucesso em: ${statusTopic}`);
+      });
     });
 
     client.on('message', (topic, payload) => {
@@ -129,23 +126,33 @@ export default function Dashboard() {
         if (data.temperatura !== undefined) setTemp(data.temperatura);
         else if (data.value !== undefined) setTemp(data.value);
         
+        console.log(`📡 Dados recebidos da caixa ${deviceId}: IP=${data.ip}, Temp=${data.temperatura}`);
+
         // 3. Atualiza o Status dos Relés (pode vir como array ou individual)
         if (data.reles && Array.isArray(data.reles)) {
-            // Se vier o array completo (Ex: térmico de temporizador)
             setRelays(prev => prev.map((r, idx) => ({
                 ...r,
                 is_on: data.reles[idx] !== undefined ? data.reles[idx] : r.is_on
             })));
         } else if (data.is_on !== undefined && data.id) {
-            // Se vier atualização individual
             setRelays(prev => prev.map(r => r.id === data.id ? { ...r, is_on: data.is_on } : r));
         }
 
-        // Se recebemos mensagem, o dispositivo está online
+        // 4. Status Online
         setIsDeviceOnline(true);
       } catch (e) {
         console.error("Error parsing MQTT message:", e);
       }
+    });
+
+    client.on('error', (err) => {
+      console.error("❌ Erro de Conexão MQTT:", err);
+      setIsBrokerConnected(false);
+    });
+
+    client.on('close', () => {
+      console.log("⚠️ Conexão MQTT fechada.");
+      setIsBrokerConnected(false);
     });
 
     setMqttClient(client);
