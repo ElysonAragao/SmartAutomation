@@ -55,6 +55,15 @@ Para manter a compatibilidade com a rotina anterior do Firebase:
   - **Vercel**: Deploy global funcional com suporte a CI/CD e TLS Seguro (HiveMQ Cloud).
   - **Build Safe**: Código otimizado para não quebrar durante a exportação na Vercel se chaves de ambiente estiverem ausentes.
 
+### [2026-04-03] - Validação de Regras de Negócio (Box ID & Aliases)
+- **Dashboard & Multi-tenancy**: 
+  - **Isolamento por ID**: Confirmado que cada `Box ID` (Ex: `Cx-0001`, `Cx-0002`) possui seu próprio bucket de Aliases (apelidos dos interruptores) no Firestore.
+  - **Troca Dinâmica**: A mudança do ID no Dashboard reconfigura instantaneamente:
+    1.  **Leitura de Nomes**: Carrega os apelidos salvos especificamente para a nova caixa.
+    2.  **Comunicação MQTT**: Altera os tópicos de subscrição e publicação para o novo ID.
+    3.  **Captura de IP**: O IP da nova caixa é atualizado no cabeçalho assim que ela se comunica via MQTT.
+- **Segurança de Registro**: O sistema garante que, ao renomear um interruptor no Dashboard, a alteração seja gravada de forma persistente e vinculada exclusivamente à caixa ativa no momento.
+
 ---
 
 ## 🛠️ Procedimento de Trabalho: Favicon no ESP32

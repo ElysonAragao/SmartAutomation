@@ -68,17 +68,20 @@ export default function Dashboard() {
            ...doc.data()
          })) as any[];
          
-         if (data.length > 0) {
-           setRelays(prev => {
-              return data.map(dbRelay => {
-                 const current = prev.find(r => r.id === dbRelay.id);
-                 return { ...dbRelay, is_on: current ? current.is_on : false };
-              });
+         // Faz o merge dos dados do banco com a lista inicial de 8 botões
+         setRelays(prev => {
+           return INITIAL_RELAYS.map(initial => {
+             const dbRelay = data.find(d => d.id === initial.id);
+             if (dbRelay) {
+                // Atualiza o apelido do banco, mas mantém o estado 'is_on' que vem do MQTT
+                const current = prev.find(r => r.id === initial.id);
+                return { ...dbRelay, is_on: current ? current.is_on : false };
+             }
+             // Para os que não estão no banco, mantém o padrão da INITIAL_RELAYS
+             const current = prev.find(r => r.id === initial.id);
+             return { ...initial, is_on: current ? current.is_on : false };
            });
-         } else {
-           console.log(`Caixa ${deviceId} não possui dados no Firestore. Usando padrões.`);
-           setRelays(INITIAL_RELAYS);
-         }
+         });
        });
     }
     const unsubscribeFirestore = () => {}; 
