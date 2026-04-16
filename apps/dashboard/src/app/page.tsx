@@ -180,9 +180,11 @@ export default function Dashboard() {
 
   const handleDeviceChange = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      setDeviceId(inputDeviceId);
-      setIsDeviceOnline(false); // Reseta status ao trocar de caixa
-      console.log(`Connecting to Box: ${inputDeviceId}`);
+      // Concatena o prefixo Cx- automaticamente se o usuário não digitou
+      const fullId = inputDeviceId.startsWith('Cx-') ? inputDeviceId : `Cx-${inputDeviceId}`;
+      setDeviceId(fullId);
+      setIsDeviceOnline(false); 
+      console.log(`Connecting to Box: ${fullId}`);
     }
   };
 
@@ -255,14 +257,15 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Código da Caixa (Enter)</label>
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+                    <div className="flex items-center gap-1 px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+                      <span className="text-sm font-bold text-slate-500">Cx-</span>
                       <input 
                         type="text" 
-                        value={inputDeviceId} 
+                        value={inputDeviceId.startsWith('Cx-') ? inputDeviceId.substring(3) : inputDeviceId} 
                         onChange={(e) => setInputDeviceId(e.target.value)}
                         onKeyDown={handleDeviceChange}
-                        className="bg-transparent text-sm font-bold text-indigo-400 outline-none w-28"
-                        placeholder="Digite num"
+                        className="bg-transparent text-sm font-bold text-indigo-400 outline-none w-16"
+                        placeholder="0000"
                       />
                     </div>
                     {deviceId && (
