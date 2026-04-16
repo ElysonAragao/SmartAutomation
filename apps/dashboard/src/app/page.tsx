@@ -43,9 +43,9 @@ export default function Dashboard() {
   const [isBrokerConnected, setIsBrokerConnected] = useState(false);
   const [isDeviceOnline, setIsDeviceOnline] = useState(false);
   const [loadingRelayId, setLoadingRelayId] = useState<number | null>(null);
-  const [deviceId, setDeviceId] = useState('Cx-0002'); // Current Box ID
-  const [inputDeviceId, setInputDeviceId] = useState('Cx-0002'); // Buffered input value
-  const [deviceIp, setDeviceIp] = useState('...'); // Reiniciando vazio como solicitado
+  const [deviceId, setDeviceId] = useState(''); // Inicia vazio como solicitado
+  const [inputDeviceId, setInputDeviceId] = useState(''); // Inicia vazio
+  const [deviceIp, setDeviceIp] = useState('...'); 
 
   const [mqttClient, setMqttClient] = useState<any>(null);
 
@@ -111,10 +111,12 @@ export default function Dashboard() {
       setIsBrokerConnected(true);
       
       // Subscribe explicitly
-      const statusTopic = `esp32/${deviceId}/status/#`;
-      client.subscribe(statusTopic, (err) => {
-         if (!err) console.log(`📡 Inscrito com sucesso em: ${statusTopic}`);
-      });
+      if (deviceId) {
+        const statusTopic = `esp32/${deviceId}/status/#`;
+        client.subscribe(statusTopic, (err) => {
+           if (!err) console.log(`📡 Inscrito com sucesso em: ${statusTopic}`);
+        });
+      }
     });
 
     client.on('message', (topic, payload) => {
@@ -161,10 +163,10 @@ export default function Dashboard() {
     setMqttClient(client);
 
     return () => {
-      client.end();
-      unsubscribeFirestore();
+      if (client) client.end();
+      if (unsubscribeFirestore) unsubscribeFirestore();
     };
-  }, [deviceId]); // ESSENCIAL: Re-executa tudo quando o Box ID muda
+  }, [deviceId]); 
 
   const handleRename = async (id: number, newLabel: string) => {
     console.log(`Renaming Relay ${id} to: ${newLabel} for Box: ${deviceId}`);
@@ -187,9 +189,16 @@ export default function Dashboard() {
   const handleDeviceChange = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       setDeviceId(inputDeviceId);
+      setIsDeviceOnline(false); // Reseta status ao trocar de caixa
       console.log(`Connecting to Box: ${inputDeviceId}`);
-      // Future: Trigger status request for the specific Box ID
     }
+  };
+
+  const handleLogout = () => {
+    setDeviceId('');
+    setInputDeviceId('');
+    setDeviceIp('...');
+    setIsDeviceOnline(false);
   };
 
   const handleToggle = async (id: number, newState: boolean, seconds?: number) => {
@@ -251,17 +260,27 @@ export default function Dashboard() {
 
             <div className="flex flex-wrap gap-4 items-end">
                {/* Box ID Selector */}
-               <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2">
                   <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Código da Caixa (Enter)</label>
-                  <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
-                    <input 
-                      type="text" 
-                      value={inputDeviceId} 
-                      onChange={(e) => setInputDeviceId(e.target.value)}
-                      onKeyDown={handleDeviceChange}
-                      className="bg-transparent text-sm font-bold text-indigo-400 outline-none w-24"
-                      placeholder="Ex: Cx-0001"
-                    />
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+                      <input 
+                        type="text" 
+                        value={inputDeviceId} 
+                        onChange={(e) => setInputDeviceId(e.target.value)}
+                        onKeyDown={handleDeviceChange}
+                        className="bg-transparent text-sm font-bold text-indigo-400 outline-none w-28"
+                        placeholder="Digite num"
+                      />
+                    </div>
+                    {deviceId && (
+                      <button 
+                        onClick={handleLogout}
+                        className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all text-xs font-bold"
+                      >
+                        SAIR
+                      </button>
+                    )}
                   </div>
                </div>
 
@@ -296,54 +315,64 @@ export default function Dashboard() {
         </header>
 
         {/* Dashboard Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            {/* Global Actions - Moved to Top for Mobile Accessibility */}
-            <div className="lg:col-span-12">
-               <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                  <button 
-                    onClick={() => handleSetAll(true)}
-                    className="flex-1 py-6 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 active:scale-95 transition-all outline-none"
-                  >
-                    Ligar Geral
-                  </button>
-                  <button 
-                    onClick={() => handleSetAll(false)}
-                    className="flex-1 py-6 rounded-3xl bg-slate-900 text-rose-500 border border-rose-500/20 font-black text-xl hover:bg-rose-600 hover:text-white active:scale-95 transition-all outline-none"
-                  >
-                    Desligar Geral
-                  </button>
-               </div>
+        {!deviceId ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-slate-900/20 border border-dashed border-slate-800 rounded-[3rem] text-center">
+            <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">
+              <Settings className="w-10 h-10 text-indigo-500 animate-spin-slow" />
             </div>
-
-            {/* Relay Grid */}
-            <div className="lg:col-span-12">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-indigo-500" />
-                  Interruptores de Comando (8)
-                </h2>
-                <div className="h-[2px] flex-1 mx-6 bg-slate-800/50 rounded-full" />
+            <h2 className="text-2xl font-bold mb-2">Aguardando Identidade da Caixa</h2>
+            <p className="text-slate-500 max-w-sm">Informe o código da caixa (ex: Cx-0001) no campo acima e pressione Enter para iniciar o controle.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
+              {/* Global Actions - Moved to Top for Mobile Accessibility */}
+              <div className="lg:col-span-12">
+                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <button 
+                      onClick={() => handleSetAll(true)}
+                      className="flex-1 py-6 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 active:scale-95 transition-all outline-none"
+                    >
+                      Ligar Geral
+                    </button>
+                    <button 
+                      onClick={() => handleSetAll(false)}
+                      className="flex-1 py-6 rounded-3xl bg-slate-900 text-rose-500 border border-rose-500/20 font-black text-xl hover:bg-rose-600 hover:text-white active:scale-95 transition-all outline-none"
+                    >
+                      Desligar Geral
+                    </button>
+                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <AnimatePresence>
-                  {relays.map((relay) => (
-                    <RelayCard 
-                      key={relay.id}
-                      id={relay.id}
-                      label={relay.label}
-                      isOn={relay.is_on}
-                      onToggle={handleToggle}
-                      onRename={handleRename}
-                      isLoading={loadingRelayId === relay.id}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
+              {/* Relay Grid */}
+              <div className="lg:col-span-12">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-indigo-500" />
+                    Interruptores de Comando (8) - {deviceId}
+                  </h2>
+                  <div className="h-[2px] flex-1 mx-6 bg-slate-800/50 rounded-full" />
+                </div>
 
-        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <AnimatePresence>
+                    {relays.map((relay) => (
+                      <RelayCard 
+                        key={relay.id}
+                        id={relay.id}
+                        label={relay.label}
+                        isOn={relay.is_on}
+                        onToggle={handleToggle}
+                        onRename={handleRename}
+                        isLoading={loadingRelayId === relay.id}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+          </div>
+        )}
 
         {/* Footer info */}
         <footer className="mt-24 pt-8 border-t border-slate-800 text-slate-600 text-sm flex flex-col md:flex-row justify-between gap-4">
