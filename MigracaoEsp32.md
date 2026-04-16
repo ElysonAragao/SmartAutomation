@@ -72,6 +72,35 @@ Para manter a compatibilidade com a rotina anterior do Firebase:
 2. Basta copiar o conteúdo deste arquivo para o seu projeto no Arduino IDE.
 3. O código principal já faz a chamada automática para servir o ícone no navegador.
 
+### [2026-04-06] - Conclusão da Infraestrutura Firestore & Deploy
+- **Configuração Firestore**: 
+  - **Credenciais Reais**: Substituídos os placeholders no `.env.local` pelas chaves do projeto `esp32-controle-ilumincao`.
+  - **Habilitação Permanente**: Atualizadas as Regras de Segurança no Firebase para acesso permanente (`allow read, write: if true`), eliminando a expiração do Modo de Teste.
+- **Correção de UI**: 
+  - **Dinamismo de Relés**: Corrigida a lógica de `onSnapshot` no `page.tsx` para garantir que todos os 8 interruptores permaneçam visíveis, mesmo que apenas alguns possuam apelidos salvos no banco.
+- **Deploy & CI/CD**: 
+  - **GitHub**: Sincronização de código com commit `feat(dashboard): Corrigido o bug de visibilidade dos botões e configurado o Firestore oficial`.
+  - **Vercel**: Configuração manual das `Environment Variables` no painel da Vercel para espelhar o `.env.local` e garantir persistência global.
+  - **Teste de Persistência**: Validado o funcionamento em modo anônimo, confirmando a correta gravação/leitura do NoSQL.
+
+### [2026-04-16] - Estratégia "Smart Boot" & ID Dinâmico (v2.9)
+- **Firmware ESP32-C3 (v2.9)**:
+  - **Smart Boot (Anti-Travamento)**: Implementada estratégia de **Deep Sleep (60s)** ao iniciar por queda de energia. Isso garante silêncio total de RF e elétrico para que o roteador carregue sem interferência do ESP32.
+  - **ID da Caixa Dinâmico**: O `DEVICE_ID` (Ex: `Cx-0001`) agora é configurável via Portal Web e salvo na memória flash (`Preferences`), eliminando a necessidade de recompilar para cada nova unidade.
+  - **Melhoria de UI/UX Local**: Adicionado botão de Logout ("Sair do Sistema") destacado e exibição do ID da Caixa no Dashboard local.
+  - **Monitor Serial**: Adicionado log automático do IP e ID do dispositivo no Monitor Serial após a conexão bem-sucedida.
+- **Dashboard Next.js**:
+  - **Compatibilidade**: Validada a compatibilidade do seletor de IDs dinâmicos com a nova lógica do firmware.
+- **Deploy**: Sincronização global via GitHub e Vercel.
+
+---
+
+## 🛠️ Procedimento de Trabalho: Favicon no ESP32
+Para manter a compatibilidade com a rotina anterior do Firebase:
+1. O arquivo `Favicon.h` contém o código hexadecimal completo do ícone.
+2. Basta copiar o conteúdo deste arquivo para o seu projeto no Arduino IDE.
+3. O código principal já faz a chamada automática para servir o ícone no navegador.
+
 ---
 
 ## 🛠️ Em Andamento
