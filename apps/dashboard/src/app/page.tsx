@@ -50,20 +50,15 @@ export default function Dashboard() {
   const [mqttClient, setMqttClient] = useState<any>(null);
 
   useEffect(() => {
-    // 1. Fetch Labels from Firestore (Multi-tenant: /boxes/{deviceId}/relays)
-    // Só tenta ler do banco se 'db' foi inicializado com chaves válidas
-    if (!db) {
-       console.log("⚠️ Firebase não disponível. Operando apenas via MQTT.");
-       setRelays(INITIAL_RELAYS);
-    }
+    let unsubscribeFirestore = () => {}; 
 
-    if (db) {
+    if (db && deviceId) {
        const relaysRef = collection(db, 'boxes', deviceId, 'relays');
        const q = query(relaysRef, orderBy('id', 'asc'));
        
        setRelays(INITIAL_RELAYS);
 
-       const unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+       unsubscribeFirestore = onSnapshot(q, (snapshot) => {
          const data = snapshot.docs.map(doc => ({
            ...doc.data()
          })) as any[];
@@ -84,16 +79,13 @@ export default function Dashboard() {
          });
        });
     }
-    const unsubscribeFirestore = () => {}; 
-
-    // 2. Setup MQTT Connection (Usando variáveis de ambiente)
+    // 2. Setup MQTT Connection (Apenas se houver ID de dispositivo)
     const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL;
     const mqttUser = process.env.NEXT_PUBLIC_MQTT_USER;
     const mqttPass = process.env.NEXT_PUBLIC_MQTT_PASS;
 
-    // Se o MQTT URL não estiver presente (ex: durante o build na Vercel), não inicializa para evitar erros
-    if (!mqttUrl) {
-      console.log("Aguardando configuração de MQTT nas variáveis de ambiente da Vercel...");
+    if (!mqttUrl || !deviceId) {
+      if (!mqttUrl) console.log("Aguardando configuração de MQTT na Vercel...");
       setIsBrokerConnected(false);
       return () => unsubscribeFirestore();
     }
