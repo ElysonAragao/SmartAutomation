@@ -15,11 +15,9 @@ import {
   Check,
   Power,
   Video
-} from 'lucide-react';
-import mqtt from 'mqtt';
-import { RelayCard } from '@/components/RelayCard';
-import { db, auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { db, auth, firebaseConfig } from '@/lib/firebase';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth } from 'firebase/auth';
+import { initializeApp, getApps } from 'firebase/app';
 import { 
   collection, 
   onSnapshot, 
@@ -186,6 +184,53 @@ export default function Dashboard() {
   // Admin State
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  
+  // Create Client State
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientPassword, setNewClientPassword] = useState('123456');
+  const [newClientBoxes, setNewClientBoxes] = useState('');
+  const [isCreatingClient, setIsCreatingClient] = useState(false);
+  const [createClientStatus, setCreateClientStatus] = useState<{type: 'error'|'success', msg: string} | null>(null);
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClientEmail || !newClientPassword) return;
+    setIsCreatingClient(true);
+    setCreateClientStatus(null);
+    
+    try {
+      // O "Truque de Ouro": Conexão Secundária
+      const secondaryApp = getApps().find(app => app.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
+      const secondaryAuth = getFirebaseAuth(secondaryApp);
+      
+      // Cria o usuário na conta secundária
+      await createUserWithEmailAndPassword(secondaryAuth, newClientEmail, newClientPassword);
+      
+      // Salva o perfil no Firestore
+      const boxesArray = newClientBoxes.split(',').map(b => b.trim()).filter(b => b !== '');
+      await setDoc(doc(db, 'users', newClientEmail), {
+        role: 'client',
+        boxes: boxesArray,
+        email: newClientEmail
+      });
+
+      setCreateClientStatus({ type: 'success', msg: 'Cliente criado com sucesso!' });
+      setNewClientEmail('');
+      setNewClientBoxes('');
+      // Mantém a senha padrão 123456 para o próximo cadastro se quiser
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/email-already-in-use') {
+        setCreateClientStatus({ type: 'error', msg: 'Este e-mail já está cadastrado.' });
+      } else {
+        setCreateClientStatus({ type: 'error', msg: 'Erro ao criar cliente: ' + err.message });
+      }
+    } finally {
+      setIsCreatingClient(false);
+      // Limpa a mensagem após 5 segundos
+      setTimeout(() => setCreateClientStatus(null), 5000);
+    }
+  };
   
   useEffect(() => {
     if (!db || userRole !== 'master') return;
@@ -880,14 +925,59 @@ export default function Dashboard() {
                 <button onClick={() => setShowAdminModal(false)} className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition"><X className="w-6 h-6" /></button>
               </div>
               <div className="flex-1 overflow-y-auto p-6">
-                <div className="mb-6 bg-slate-800/30 border border-slate-800 rounded-2xl p-4">
-                   <p className="text-sm text-slate-400 mb-2"><strong>Como adicionar um cliente:</strong></p>
-                   <ol className="list-decimal pl-5 text-sm text-slate-500 space-y-1">
-                      <li>Vá no painel do Firebase e crie a conta do cliente com e-mail e uma senha provisória.</li>
-                      <li>Volte aqui, localize o e-mail (que aparecerá automaticamente) e vincule as caixas dele.</li>
-                   </ol>
+                <div className="mb-6 bg-slate-800/30 border border-slate-800 rounded-2xl p-5">
+                   <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-emerald-500"/> Adicionar Novo Cliente</h3>
+                   
+                   <form onSubmit={handleCreateClient} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                     <div className="md:col-span-4">
+                       <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">E-mail do Cliente</label>
+                       <input 
+                         type="email" 
+                         value={newClientEmail}
+                         onChange={(e) => setNewClientEmail(e.target.value)}
+                         required
+                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                         placeholder="cliente@email.com"
+                       />
+                     </div>
+                     <div className="md:col-span-3">
+                       <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Senha Padrão</label>
+                       <input 
+                         type="text" 
+                         value={newClientPassword}
+                         onChange={(e) => setNewClientPassword(e.target.value)}
+                         required
+                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                       />
+                     </div>
+                     <div className="md:col-span-3">
+                       <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Caixas (Separe com vírgula)</label>
+                       <input 
+                         type="text" 
+                         value={newClientBoxes}
+                         onChange={(e) => setNewClientBoxes(e.target.value)}
+                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                         placeholder="Ex: Cx-0002, Cx-0003"
+                       />
+                     </div>
+                     <div className="md:col-span-2">
+                       <button 
+                         type="submit" 
+                         disabled={isCreatingClient}
+                         className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center disabled:opacity-50"
+                       >
+                         {isCreatingClient ? 'Criando...' : 'Cadastrar'}
+                       </button>
+                     </div>
+                   </form>
+                   {createClientStatus && (
+                     <div className={`mt-4 p-3 rounded-xl text-sm font-medium text-center ${createClientStatus.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                       {createClientStatus.msg}
+                     </div>
+                   )}
                 </div>
                 
+                <h3 className="text-sm font-bold text-slate-400 mb-4 px-2 uppercase tracking-widest">Base de Clientes</h3>
                 <div className="space-y-4">
                   {allUsers.map((u) => (
                     <div key={u.id} className="bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
