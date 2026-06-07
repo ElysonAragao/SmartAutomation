@@ -644,7 +644,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 w-full h-full bg-black relative">
                 <iframe 
-                  src="http://localhost:5001" 
+                  src={process.env.NEXT_PUBLIC_DVR_STREAM_URL || "http://localhost:5001"} 
                   className="w-full h-full border-none absolute top-0 left-0"
                   title="Camera Stream"
                 />
