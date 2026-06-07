@@ -1,6 +1,6 @@
 {
-    "rtsp_url": "rtsp://192.168.3.179:554/user=admin&password=&channel=1&stream=1.sdp",
-    "camera_name": "C\u00e2mera 1",
+    "rtsp_url": "rtsp://192.168.3.179:554/user=admin&password=&channel=2&stream=1.sdp",
+    "camera_name": "C\u00e2mera 2",
     "ptz_url_template": "http://192.168.1.100/cgi-bin/ptz.cgi?action=move&direction={direction}&speed={speed}",
     "ptz_preset_template": "http://192.168.1.100/cgi-bin/ptz.cgi?action=preset&preset_id={preset_id}",
     "ptz_speed": 5,
