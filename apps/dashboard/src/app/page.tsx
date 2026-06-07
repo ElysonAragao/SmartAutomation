@@ -714,7 +714,7 @@ export default function Dashboard() {
                   <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">Smart<span className="text-indigo-500">Automation</span></h1>
                 </div>
                 
-                <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex flex-wrap gap-4 items-start">
                    <div className="flex items-center gap-3 px-6 py-4 rounded-3xl bg-slate-900/50 border border-slate-800 overflow-hidden relative h-[76px]">
                       <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 blur-2xl rounded-full" />
                       <Thermometer className="text-orange-500 w-6 h-6" />
