@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import mqtt from 'mqtt';
 import { RelayCard } from '@/components/RelayCard';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { 
   collection, 
   onSnapshot, 
@@ -64,7 +65,16 @@ export default function Dashboard() {
   const [inputDeviceId, setInputDeviceId] = useState(''); 
   const [deviceIp, setDeviceIp] = useState('...'); 
 
+  // Auth State
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const [mqttClient, setMqttClient] = useState<any>(null);
+  const [cameraUrl, setCameraUrl] = useState<string | null>(null);
 
   // Timers State
   const [activeTimers, setActiveTimers] = useState<{[key: number]: {
@@ -95,9 +105,47 @@ export default function Dashboard() {
   const [showCameraModal, setShowCameraModal] = useState(false);
 
   useEffect(() => {
+    if (!auth) {
+      setAuthLoading(false);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      if (auth) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        throw new Error('Autenticação não configurada.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setLoginError('E-mail ou senha incorretos.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (auth) {
+      await signOut(auth);
+      setDeviceId('');
+      setInputDeviceId('');
+    }
+  };
+
+  useEffect(() => {
     let unsubscribeFirestore = () => {}; 
 
-    if (db && deviceId) {
+    if (db && deviceId && user) {
        const relaysRef = collection(db, 'boxes', deviceId, 'relays');
        const q = query(relaysRef, orderBy('id', 'asc'));
        
@@ -120,13 +168,29 @@ export default function Dashboard() {
            });
          });
        });
+
+       const deviceDocRef = doc(db, 'boxes', deviceId);
+       const unsubscribeDevice = onSnapshot(deviceDocRef, (docSnap) => {
+         if (docSnap.exists()) {
+           const data = docSnap.data();
+           if (data.camera_url) {
+             setCameraUrl(data.camera_url);
+           }
+         }
+       });
+
+       const originalUnsubscribe = unsubscribeFirestore;
+       unsubscribeFirestore = () => {
+         originalUnsubscribe();
+         unsubscribeDevice();
+       };
     }
 
     const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL;
     const mqttUser = process.env.NEXT_PUBLIC_MQTT_USER;
     const mqttPass = process.env.NEXT_PUBLIC_MQTT_PASS;
 
-    if (!mqttUrl || !deviceId) {
+    if (!mqttUrl || !deviceId || !user) {
       setIsBrokerConnected(false);
       return () => unsubscribeFirestore();
     }
@@ -190,7 +254,7 @@ export default function Dashboard() {
   }, [deviceId]); 
 
   useEffect(() => {
-    if (db && deviceId) {
+    if (db && deviceId && user) {
       const schedulesRef = collection(db, 'boxes', deviceId, 'schedules');
       const unsubscribe = onSnapshot(schedulesRef, (snapshot) => {
         const data = snapshot.docs.map(doc => ({
@@ -404,6 +468,72 @@ export default function Dashboard() {
     setRelays(prev => prev.map(r => ({ ...r, is_on: state })));
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center">
+        <Zap className="w-12 h-12 text-indigo-500 animate-pulse mb-4" />
+        <p className="text-slate-400 font-bold animate-pulse">Carregando sistema...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
+          
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-indigo-600/20 rounded-2xl flex items-center justify-center mb-6">
+              <Zap className="text-indigo-500 w-8 h-8 fill-indigo-500/50" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-white text-center">SmartAutomation</h1>
+            <p className="text-slate-500 text-sm font-medium mt-2">Faça login para acessar suas centrais</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">E-mail</label>
+              <input 
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:bg-slate-900 text-white rounded-xl px-4 py-3 outline-none transition-all font-medium placeholder-slate-600"
+                placeholder="seu@email.com"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Senha</label>
+              <input 
+                type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:bg-slate-900 text-white rounded-xl px-4 py-3 outline-none transition-all font-medium placeholder-slate-600"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {loginError && (
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm p-3 rounded-xl font-medium text-center">
+                {loginError}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              disabled={isLoggingIn}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isLoggingIn ? 'Entrando...' : 'Entrar no Painel'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 font-sans selection:bg-indigo-500/30">
       <nav className="fixed left-0 top-0 h-full w-20 hidden md:flex flex-col items-center py-8 border-r border-slate-800/50 bg-[#020617]/50 backdrop-blur-xl z-50">
@@ -429,7 +559,17 @@ export default function Dashboard() {
               <p className="text-indigo-500 font-bold tracking-widest uppercase text-xs mb-2">Resumo do Sistema</p>
               <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">Smart<span className="text-indigo-500">Automation</span></h1>
             </div>
-            <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Sua Conta</label>
+                  <div className="flex items-center gap-2">
+                    <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800">
+                      <span className="text-sm font-bold text-slate-400">{user.email}</span>
+                    </div>
+                    <button onClick={handleSignOut} className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all text-xs font-bold">SAIR</button>
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Código da Caixa (Enter)</label>
                   <div className="flex items-center gap-2">
@@ -445,7 +585,7 @@ export default function Dashboard() {
                       />
                     </div>
                     {deviceId && (
-                      <button onClick={handleLogout} className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all text-xs font-bold">SAIR</button>
+                      <button onClick={handleLogout} className="p-2.5 bg-slate-800 border border-slate-700 text-slate-400 rounded-2xl hover:bg-slate-700 hover:text-white transition-all text-xs font-bold" title="Desconectar Caixa"><X className="w-4 h-4"/></button>
                     )}
                   </div>
                </div>
@@ -644,7 +784,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 w-full h-full bg-black relative">
                 <iframe 
-                  src={process.env.NEXT_PUBLIC_DVR_STREAM_URL || "http://localhost:5001"} 
+                  src={cameraUrl || process.env.NEXT_PUBLIC_DVR_STREAM_URL || "http://localhost:5001"} 
                   className="w-full h-full border-none absolute top-0 left-0"
                   title="Camera Stream"
                 />
