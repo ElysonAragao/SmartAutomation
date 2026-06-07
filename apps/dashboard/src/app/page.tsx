@@ -62,11 +62,12 @@ export default function Dashboard() {
   const [isDeviceOnline, setIsDeviceOnline] = useState(false);
   const [loadingRelayId, setLoadingRelayId] = useState<number | null>(null);
   const [deviceId, setDeviceId] = useState(''); 
-  const [inputDeviceId, setInputDeviceId] = useState(''); 
   const [deviceIp, setDeviceIp] = useState('...'); 
 
-  // Auth State
+  // Auth & Profile State
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<'master' | 'client' | null>(null);
+  const [userBoxes, setUserBoxes] = useState<string[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -129,7 +130,13 @@ export default function Dashboard() {
       }
     } catch (err: any) {
       console.error(err);
-      setLoginError('E-mail ou senha incorretos.');
+      if (err.code === 'auth/invalid-credential') {
+        setLoginError('E-mail ou senha incorretos.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setLoginError('Domínio não autorizado no Firebase.');
+      } else {
+        setLoginError(err.message || 'Erro ao fazer login.');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -139,9 +146,55 @@ export default function Dashboard() {
     if (auth) {
       await signOut(auth);
       setDeviceId('');
-      setInputDeviceId('');
+      setUserRole(null);
+      setUserBoxes([]);
     }
   };
+
+  // Fetch User Profile Data
+  useEffect(() => {
+    if (!db || !user?.email) return;
+    
+    const userRef = doc(db, 'users', user.email);
+    const unsubscribeProfile = onSnapshot(userRef, async (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserRole(data.role || 'client');
+        setUserBoxes(data.boxes || []);
+        
+        // Auto-select first box if none selected
+        if (data.boxes && data.boxes.length > 0) {
+          setDeviceId(prev => prev === '' || !data.boxes.includes(prev) ? data.boxes[0] : prev);
+        } else {
+          setDeviceId('');
+        }
+      } else {
+        // Create initial profile
+        const isMaster = user.email === 'elysonaragao@gmail.com';
+        const initialProfile = {
+          role: isMaster ? 'master' : 'client',
+          boxes: isMaster ? ['Cx-0001'] : [],
+          email: user.email
+        };
+        await setDoc(userRef, initialProfile);
+      }
+    });
+
+    return () => unsubscribeProfile();
+  }, [user]);
+
+  // Admin State
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  
+  useEffect(() => {
+    if (!db || userRole !== 'master') return;
+    const usersRef = collection(db, 'users');
+    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+      setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [userRole]);
 
   useEffect(() => {
     let unsubscribeFirestore = () => {}; 
@@ -571,29 +624,37 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Sua Conta</label>
                   <div className="flex items-center gap-2">
-                    <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800">
+                    <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-400">{user.email}</span>
+                      {userRole === 'master' && <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-[9px] font-black uppercase">Master</span>}
                     </div>
+                    {userRole === 'master' && (
+                      <button onClick={() => setShowAdminModal(true)} className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl hover:bg-indigo-500 hover:text-white transition-all text-xs font-bold" title="Painel Master"><Settings className="w-4 h-4"/></button>
+                    )}
                     <button onClick={handleSignOut} className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all text-xs font-bold">SAIR</button>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Código da Caixa (Enter)</label>
+                  <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Caixa Selecionada</label>
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
-                      <span className="text-sm font-bold text-slate-500">Cx-</span>
-                      <input 
-                        type="text" 
-                        value={inputDeviceId.startsWith('Cx-') ? inputDeviceId.substring(3) : inputDeviceId} 
-                        onChange={(e) => setInputDeviceId(e.target.value)}
-                        onKeyDown={handleDeviceChange}
-                        className="bg-transparent text-sm font-bold text-indigo-400 outline-none w-16"
-                        placeholder="0000"
-                      />
-                    </div>
-                    {deviceId && (
-                      <button onClick={handleLogout} className="p-2.5 bg-slate-800 border border-slate-700 text-slate-400 rounded-2xl hover:bg-slate-700 hover:text-white transition-all text-xs font-bold" title="Desconectar Caixa"><X className="w-4 h-4"/></button>
+                    {userBoxes.length === 0 ? (
+                       <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800 text-sm font-bold text-slate-500">Nenhuma caixa vinculada</div>
+                    ) : (
+                      <select 
+                        value={deviceId}
+                        onChange={(e) => {
+                          setDeviceId(e.target.value);
+                          setIsDeviceOnline(false);
+                          setDeviceIp('...');
+                        }}
+                        className="px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-sm font-bold text-indigo-400 outline-none appearance-none cursor-pointer pr-10"
+                        style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23818cf8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '12px auto' }}
+                      >
+                        {userBoxes.map(box => (
+                          <option key={box} value={box} className="bg-slate-900 text-white">{box}</option>
+                        ))}
+                      </select>
                     )}
                   </div>
                </div>
@@ -631,12 +692,12 @@ export default function Dashboard() {
         </header>
 
         {!deviceId ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-slate-900/20 border border-dashed border-slate-800 rounded-[3rem] text-center">
+          <div className="flex flex-col items-center justify-center py-20 bg-slate-900/20 border border-dashed border-slate-800 rounded-[3rem] text-center mt-8">
             <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">
-              <Settings className="w-10 h-10 text-indigo-500 animate-spin-slow" />
+              <Zap className="w-10 h-10 text-indigo-500" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Aguardando Identidade da Caixa</h2>
-            <p className="text-slate-500 max-w-sm">Informe o código da caixa (ex: Cx-0001) no campo acima e pressione Enter para iniciar o controle.</p>
+            <h2 className="text-2xl font-bold mb-2">Nenhuma Central Vinculada</h2>
+            <p className="text-slate-500 max-w-sm">A sua conta ainda não possui nenhuma caixa vinculada. Fale com o administrador do sistema para liberar o seu acesso.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -796,6 +857,85 @@ export default function Dashboard() {
                   className="w-full h-full border-none absolute top-0 left-0"
                   title="Camera Stream"
                 />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAdminModal && userRole === 'master' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col relative">
+              <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Painel Master</h2>
+                    <p className="text-xs text-slate-500 font-bold uppercase">Gestão de Clientes e Caixas</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAdminModal(false)} className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition"><X className="w-6 h-6" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="mb-6 bg-slate-800/30 border border-slate-800 rounded-2xl p-4">
+                   <p className="text-sm text-slate-400 mb-2"><strong>Como adicionar um cliente:</strong></p>
+                   <ol className="list-decimal pl-5 text-sm text-slate-500 space-y-1">
+                      <li>Vá no painel do Firebase e crie a conta do cliente com e-mail e uma senha provisória.</li>
+                      <li>Volte aqui, localize o e-mail (que aparecerá automaticamente) e vincule as caixas dele.</li>
+                   </ol>
+                </div>
+                
+                <div className="space-y-4">
+                  {allUsers.map((u) => (
+                    <div key={u.id} className="bg-slate-950 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold text-white">{u.id}</span>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${u.role === 'master' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{u.role}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">Caixas vinculadas: {u.boxes?.length || 0}</p>
+                      </div>
+                      <div className="flex-1 w-full md:w-auto">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Adicionar Caixa (Ex: Cx-0002 e Enter)</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                           {u.boxes?.map((box: string) => (
+                             <span key={box} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-2">
+                               {box} 
+                               <button 
+                                 onClick={() => {
+                                   const newBoxes = u.boxes.filter((b: string) => b !== box);
+                                   setDoc(doc(db, 'users', u.id), { boxes: newBoxes }, { merge: true });
+                                 }}
+                                 className="text-rose-500 hover:text-rose-400"><X className="w-3 h-3" />
+                               </button>
+                             </span>
+                           ))}
+                        </div>
+                        <input 
+                           type="text" 
+                           placeholder="Digite e aperte Enter..." 
+                           className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                           onKeyDown={(e) => {
+                             if (e.key === 'Enter') {
+                               const val = e.currentTarget.value.trim();
+                               if (val) {
+                                 const currentBoxes = u.boxes || [];
+                                 if (!currentBoxes.includes(val)) {
+                                   setDoc(doc(db, 'users', u.id), { boxes: [...currentBoxes, val] }, { merge: true });
+                                 }
+                                 e.currentTarget.value = '';
+                               }
+                             }
+                           }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {allUsers.length === 0 && <p className="text-center text-slate-500 py-8">Nenhum cliente cadastrado ainda.</p>}
+                </div>
               </div>
             </motion.div>
           </motion.div>
