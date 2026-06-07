@@ -15,6 +15,7 @@ import {
   Check,
   Power,
   Video
+} from 'lucide-react';
 import { db, auth, firebaseConfig } from '@/lib/firebase';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
