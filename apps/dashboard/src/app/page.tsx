@@ -70,6 +70,7 @@ export default function Dashboard() {
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -503,16 +504,23 @@ export default function Dashboard() {
                 placeholder="seu@email.com"
               />
             </div>
-            <div>
+            <div className="relative">
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Senha</label>
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:bg-slate-900 text-white rounded-xl px-4 py-3 outline-none transition-all font-medium placeholder-slate-600"
                 placeholder="••••••••"
               />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-[38px] text-slate-500 hover:text-white transition-colors"
+              >
+                {showPassword ? "Ocultar" : "Mostrar"}
+              </button>
             </div>
 
             {loginError && (
