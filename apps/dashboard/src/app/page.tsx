@@ -654,12 +654,9 @@ export default function Dashboard() {
       </nav>
 
       <main className="md:ml-20 p-6 lg:p-12 max-w-7xl mx-auto">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-            <div>
-              <p className="text-indigo-500 font-bold tracking-widest uppercase text-xs mb-2">Resumo do Sistema</p>
-              <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">Smart<span className="text-indigo-500">Automation</span></h1>
-            </div>
-            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end">
+        <header className="flex flex-col gap-8 mb-12">
+            {/* Top Row: Settings & Account */}
+            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end justify-end w-full">
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Sua Conta</label>
                   <div className="flex items-center gap-2">
@@ -697,36 +694,52 @@ export default function Dashboard() {
                     )}
                   </div>
                </div>
-               <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/50 border border-slate-800 overflow-hidden relative">
-                  <Globe className="text-blue-500 w-5 h-5" />
-                  <div>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase">Endereço IP</p>
-                    <a href={`http://${deviceIp}`} target="_blank" rel="noreferrer" className="text-lg font-bold hover:text-blue-400 transition-colors">{deviceIp}</a>
-                  </div>
-               </div>
-               <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/50 border border-slate-800 overflow-hidden relative">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 blur-2xl rounded-full" />
-                  <Thermometer className="text-orange-500 w-5 h-5" />
-                  <div>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase">Temperatura</p>
-                    <p className="text-lg font-bold">{temp}°C</p>
-                  </div>
-               </div>
-               <div className="flex flex-col">
-                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/50 border border-slate-800">
-                    <Wifi className={isDeviceOnline ? "text-emerald-500" : "text-rose-500"} />
+
+               <div className="flex flex-col gap-2">
+                 <label className="text-[10px] text-slate-500 font-bold uppercase ml-1 opacity-0">Espaçamento</label>
+                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/50 border border-slate-800 overflow-hidden relative">
+                    <Globe className="text-blue-500 w-5 h-5" />
                     <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase">Esp32 Status</p>
-                      <p className="text-lg font-bold">{isDeviceOnline ? "Online" : "Offline"}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">Endereço IP</p>
+                      <a href={`http://${deviceIp}`} target="_blank" rel="noreferrer" className="text-lg font-bold hover:text-blue-400 transition-colors">{deviceIp}</a>
                     </div>
                  </div>
-                 <button 
-                   onClick={() => setShowCameraModal(true)} 
-                   className="mt-2 w-full text-center text-red-500 font-black tracking-widest uppercase text-sm hover:text-red-400 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 drop-shadow-md"
-                 >
-                    <Video className="w-4 h-4" /> Cameras
-                 </button>
                </div>
+            </div>
+
+            {/* Middle Row: Title & Status Cards */}
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+                <div>
+                  <p className="text-indigo-500 font-bold tracking-widest uppercase text-xs mb-2">Resumo do Sistema</p>
+                  <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">Smart<span className="text-indigo-500">Automation</span></h1>
+                </div>
+                
+                <div className="flex flex-wrap gap-4 items-end">
+                   <div className="flex items-center gap-3 px-6 py-4 rounded-3xl bg-slate-900/50 border border-slate-800 overflow-hidden relative h-[76px]">
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 blur-2xl rounded-full" />
+                      <Thermometer className="text-orange-500 w-6 h-6" />
+                      <div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Temperatura</p>
+                        <p className="text-2xl font-bold">{temp}°C</p>
+                      </div>
+                   </div>
+
+                   <div className="flex flex-col gap-2">
+                     <div className="flex items-center gap-3 px-6 py-3 rounded-3xl bg-slate-900/50 border border-slate-800">
+                        <Wifi className={isDeviceOnline ? "text-emerald-500" : "text-rose-500"} />
+                        <div>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase">Esp32 Status</p>
+                          <p className="text-lg font-bold">{isDeviceOnline ? "Online" : "Offline"}</p>
+                        </div>
+                     </div>
+                     <button 
+                       onClick={() => setShowCameraModal(true)} 
+                       className="w-full text-center text-red-500 font-black tracking-widest uppercase text-xs hover:text-red-400 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 drop-shadow-md"
+                     >
+                        <Video className="w-4 h-4" /> Cameras
+                     </button>
+                   </div>
+                </div>
             </div>
         </header>
 
