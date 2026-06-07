@@ -16,6 +16,8 @@ import {
   Power,
   Video
 } from 'lucide-react';
+import mqtt from 'mqtt';
+import { RelayCard } from '@/components/RelayCard';
 import { db, auth, firebaseConfig } from '@/lib/firebase';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
@@ -535,17 +537,8 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeviceChange = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const fullId = inputDeviceId.startsWith('Cx-') ? inputDeviceId : `Cx-${inputDeviceId}`;
-      setDeviceId(fullId);
-      setIsDeviceOnline(false); 
-    }
-  };
-
   const handleLogout = () => {
     setDeviceId('');
-    setInputDeviceId('');
     setDeviceIp('...');
     setIsDeviceOnline(false);
     setActiveTimers({});
