@@ -13,8 +13,7 @@ import {
   Plus,
   X,
   Check,
-  Power,
-  Video
+  Power
 } from 'lucide-react';
 import mqtt from 'mqtt';
 import { RelayCard } from '@/components/RelayCard';
@@ -77,7 +76,6 @@ export default function Dashboard() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [mqttClient, setMqttClient] = useState<any>(null);
-  const [cameraUrl, setCameraUrl] = useState<string | null>(null);
 
   // Timers State
   const [activeTimers, setActiveTimers] = useState<{[key: number]: {
@@ -103,9 +101,6 @@ export default function Dashboard() {
 
   // Track executed schedules to prevent duplicates in the same minute
   const [executedSchedules, setExecutedSchedules] = useState<{[key: string]: string}>({});
-
-  // Camera Modal State
-  const [showCameraModal, setShowCameraModal] = useState(false);
 
   useEffect(() => {
     if (!auth) {
@@ -271,21 +266,6 @@ export default function Dashboard() {
          });
        });
 
-       const deviceDocRef = doc(db, 'boxes', deviceId);
-       const unsubscribeDevice = onSnapshot(deviceDocRef, (docSnap) => {
-         if (docSnap.exists()) {
-           const data = docSnap.data();
-           if (data.camera_url) {
-             setCameraUrl(data.camera_url);
-           }
-         }
-       });
-
-       const originalUnsubscribe = unsubscribeFirestore;
-       unsubscribeFirestore = () => {
-         originalUnsubscribe();
-         unsubscribeDevice();
-       };
     }
 
     const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL;
@@ -732,12 +712,6 @@ export default function Dashboard() {
                           <p className="text-lg font-bold">{isDeviceOnline ? "Online" : "Offline"}</p>
                         </div>
                      </div>
-                     <button 
-                       onClick={() => setShowCameraModal(true)} 
-                       className="w-full text-center text-red-500 font-black tracking-widest uppercase text-xs hover:text-red-400 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 drop-shadow-md"
-                     >
-                        <Video className="w-4 h-4" /> Cameras
-                     </button>
                    </div>
                 </div>
             </div>
@@ -881,34 +855,6 @@ export default function Dashboard() {
                     <button onClick={() => { setIsAddingSchedule(true); setEditingScheduleId(null); }} className="w-full py-3 bg-indigo-600 rounded-2xl text-xs font-bold uppercase text-white"><Plus className="w-4 h-4 inline" /> Criar Novo</button>
                   </div>
                 )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showCameraModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden h-[85vh] flex flex-col relative">
-              <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-500">
-                    <Video className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Monitoramento</h2>
-                    <p className="text-xs text-slate-500 font-bold uppercase">Central de Câmeras</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowCameraModal(false)} className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition"><X className="w-6 h-6" /></button>
-              </div>
-              <div className="flex-1 w-full h-full bg-black relative">
-                <iframe 
-                  src={cameraUrl || process.env.NEXT_PUBLIC_DVR_STREAM_URL || "http://localhost:5001"} 
-                  className="w-full h-full border-none absolute top-0 left-0"
-                  title="Camera Stream"
-                />
               </div>
             </motion.div>
           </motion.div>
