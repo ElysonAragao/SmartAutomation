@@ -128,6 +128,7 @@ export function RelayCard({
             <div className="h-6 w-24 bg-slate-800 animate-pulse rounded mb-1" />
           ) : (
             <input
+              key={label}
               type="text"
               defaultValue={label === "..." ? "" : label}
               placeholder="..."
