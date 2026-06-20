@@ -18,7 +18,7 @@ import {
 import mqtt from 'mqtt';
 import { RelayCard } from '@/components/RelayCard';
 import { db, auth, firebaseConfig } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import { 
   collection, 
@@ -74,6 +74,28 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [resetMessage, setResetMessage] = useState<{type: 'success'|'error', msg: string} | null>(null);
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      setResetMessage({ type: 'error', msg: 'Digite seu e-mail no campo acima primeiro.' });
+      return;
+    }
+    try {
+      if (auth) {
+        await sendPasswordResetEmail(auth, email);
+        setResetMessage({ type: 'success', msg: 'E-mail de recuperação enviado! Verifique sua caixa de entrada.' });
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+         setResetMessage({ type: 'error', msg: 'E-mail não encontrado na nossa base.' });
+      } else {
+         setResetMessage({ type: 'error', msg: 'Erro ao enviar e-mail de recuperação.' });
+      }
+    }
+    setTimeout(() => setResetMessage(null), 5000);
+  };
 
   const [mqttClient, setMqttClient] = useState<any>(null);
 
@@ -589,11 +611,27 @@ export default function Dashboard() {
               <button 
                 type="button" 
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-[38px] text-slate-500 hover:text-white transition-colors"
+                className="absolute right-4 top-[38px] text-slate-500 hover:text-white transition-colors text-sm font-medium"
               >
                 {showPassword ? "Ocultar" : "Mostrar"}
               </button>
             </div>
+
+            <div className="flex justify-end mt-1">
+              <button 
+                type="button"
+                onClick={handleResetPassword}
+                className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                Esqueci minha senha
+              </button>
+            </div>
+
+            {resetMessage && (
+              <div className={`border text-sm p-3 rounded-xl font-medium text-center ${resetMessage.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-500'}`}>
+                {resetMessage.msg}
+              </div>
+            )}
 
             {loginError && (
               <div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm p-3 rounded-xl font-medium text-center">
@@ -938,6 +976,19 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-bold text-white">{u.id}</span>
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${u.role === 'master' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{u.role}</span>
+                          {u.role !== 'master' && (
+                            <button 
+                              onClick={async () => {
+                                if (window.confirm(`Deseja realmente excluir o cliente ${u.id}?`)) {
+                                  await deleteDoc(doc(db, 'users', u.id));
+                                }
+                              }}
+                              className="p-1 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors ml-2"
+                              title="Excluir Cliente"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 font-medium">Caixas vinculadas: {u.boxes?.length || 0}</p>
                       </div>
