@@ -1100,7 +1100,7 @@ export default function Dashboard() {
                         <p className="text-xs text-slate-500 font-medium">Caixas vinculadas: {u.boxes?.length || 0}</p>
                       </div>
                       <div className="flex-1 w-full md:w-auto">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Adicionar Caixa (Ex: Cx-0002 e Enter)</label>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Vincular Nova Caixa</label>
                         <div className="flex flex-wrap gap-2 mb-2">
                            {u.boxes?.map((box: string) => (
                              <span key={box} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-2">
@@ -1115,23 +1115,32 @@ export default function Dashboard() {
                              </span>
                            ))}
                         </div>
-                        <input 
-                           type="text" 
-                           placeholder="Digite e aperte Enter..." 
-                           className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
-                           onKeyDown={(e) => {
-                             if (e.key === 'Enter') {
-                               const val = e.currentTarget.value.trim();
-                               if (val) {
-                                 const currentBoxes = u.boxes || [];
-                                 if (!currentBoxes.includes(val)) {
-                                   setDoc(doc(db, 'users', u.id), { boxes: [...currentBoxes, val] }, { merge: true });
-                                 }
-                                 e.currentTarget.value = '';
+                        <form 
+                           className="flex gap-2"
+                           onSubmit={(e) => {
+                             e.preventDefault();
+                             const form = e.currentTarget;
+                             const input = form.elements.namedItem('boxInput') as HTMLInputElement;
+                             const val = input.value.trim();
+                             if (val) {
+                               const currentBoxes = u.boxes || [];
+                               if (!currentBoxes.includes(val)) {
+                                 setDoc(doc(db, 'users', u.id), { boxes: [...currentBoxes, val] }, { merge: true });
                                }
+                               input.value = '';
                              }
                            }}
-                        />
+                        >
+                          <input 
+                             name="boxInput"
+                             type="text" 
+                             placeholder="Ex: Cx-0002" 
+                             className="flex-1 min-w-0 bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                          />
+                          <button type="submit" className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs uppercase transition-all shadow-lg shadow-indigo-600/20">
+                            Vincular
+                          </button>
+                        </form>
                       </div>
                     </div>
                   ))}
