@@ -203,6 +203,9 @@ export default function Dashboard() {
       setDeviceId('');
       setUserRole(null);
       setUserBoxes([]);
+      setEmail('');
+      setPassword('');
+      setLoginError('');
     }
   };
 
