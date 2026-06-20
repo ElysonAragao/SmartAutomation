@@ -280,7 +280,17 @@ export default function Dashboard() {
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
-        setCreateClientStatus({ type: 'error', msg: 'Este e-mail já está cadastrado.' });
+        // O usuário ainda existe no Auth. Vamos atualizar/recriar o documento no Firestore!
+        const boxesArray = newClientBoxes.split(',').map(b => b.trim()).filter(b => b !== '');
+        await setDoc(doc(db, 'users', newClientEmail), {
+          role: 'client',
+          boxes: boxesArray,
+          email: newClientEmail,
+          mustChangePassword: true
+        });
+        setCreateClientStatus({ type: 'success', msg: 'Perfil do cliente recriado com sucesso!' });
+        setNewClientEmail('');
+        setNewClientBoxes('');
       } else {
         setCreateClientStatus({ type: 'error', msg: 'Erro ao criar cliente: ' + err.message });
       }
