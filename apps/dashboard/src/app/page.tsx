@@ -18,7 +18,7 @@ import {
 import mqtt from 'mqtt';
 import { RelayCard } from '@/components/RelayCard';
 import { db, auth, firebaseConfig } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth, sendPasswordResetEmail, updatePassword } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import { 
   collection, 
@@ -74,6 +74,11 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [newPasswordValue, setNewPasswordValue] = useState('');
+  const [confirmPasswordValue, setConfirmPasswordValue] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [resetMessage, setResetMessage] = useState<{type: 'success'|'error', msg: string} | null>(null);
 
   const handleResetPassword = async () => {
@@ -95,6 +100,38 @@ export default function Dashboard() {
       }
     }
     setTimeout(() => setResetMessage(null), 5000);
+  };
+
+  const handleForcePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPasswordValue.length < 6) {
+      setPasswordChangeError('A senha deve ter no mínimo 6 caracteres.');
+      return;
+    }
+    if (newPasswordValue !== confirmPasswordValue) {
+      setPasswordChangeError('As senhas não coincidem.');
+      return;
+    }
+    setIsChangingPassword(true);
+    setPasswordChangeError('');
+    try {
+      if (auth && auth.currentUser && user?.email) {
+        await updatePassword(auth.currentUser, newPasswordValue);
+        await updateDoc(doc(db, 'users', user.email), {
+          mustChangePassword: false
+        });
+        setMustChangePassword(false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/requires-recent-login') {
+         setPasswordChangeError('Por motivos de segurança, saia e faça login novamente antes de trocar a senha.');
+      } else {
+         setPasswordChangeError('Erro ao alterar a senha. Tente novamente.');
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const [mqttClient, setMqttClient] = useState<any>(null);
@@ -179,6 +216,7 @@ export default function Dashboard() {
         const data = docSnap.data();
         setUserRole(data.role || 'client');
         setUserBoxes(data.boxes || []);
+        if (data.mustChangePassword) setMustChangePassword(true);
         
         // Auto-select first box if none selected
         if (data.boxes && data.boxes.length > 0) {
@@ -231,7 +269,8 @@ export default function Dashboard() {
       await setDoc(doc(db, 'users', newClientEmail), {
         role: 'client',
         boxes: boxesArray,
-        email: newClientEmail
+        email: newClientEmail,
+        mustChangePassword: true
       });
 
       setCreateClientStatus({ type: 'success', msg: 'Cliente criado com sucesso!' });
@@ -646,6 +685,74 @@ export default function Dashboard() {
             >
               {isLoggingIn ? 'Entrando...' : 'Entrar no Painel'}
             </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (mustChangePassword) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500" />
+          
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-emerald-600/20 rounded-2xl flex items-center justify-center mb-6">
+              <Settings className="text-emerald-500 w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-white text-center">Nova Senha Obrigatória</h1>
+            <p className="text-slate-500 text-sm font-medium mt-2 text-center">Para a sua segurança, crie uma senha forte antes de acessar o sistema pela primeira vez.</p>
+          </div>
+
+          <form onSubmit={handleForcePasswordChange} className="space-y-5">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Nova Senha</label>
+              <input 
+                type="password" 
+                value={newPasswordValue}
+                onChange={(e) => setNewPasswordValue(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:bg-slate-900 text-white rounded-xl px-4 py-3 outline-none transition-all font-medium placeholder-slate-600"
+                placeholder="Mínimo 6 caracteres"
+                minLength={6}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Confirmar Nova Senha</label>
+              <input 
+                type="password" 
+                value={confirmPasswordValue}
+                onChange={(e) => setConfirmPasswordValue(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:bg-slate-900 text-white rounded-xl px-4 py-3 outline-none transition-all font-medium placeholder-slate-600"
+                placeholder="Repita a nova senha"
+                minLength={6}
+              />
+            </div>
+
+            {passwordChangeError && (
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm p-3 rounded-xl font-medium text-center">
+                {passwordChangeError}
+              </div>
+            )}
+
+            <div className="pt-2 flex flex-col gap-3">
+              <button 
+                type="submit" 
+                disabled={isChangingPassword}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isChangingPassword ? 'Salvando...' : 'Salvar Nova Senha e Entrar'}
+              </button>
+              <button 
+                type="button" 
+                onClick={handleSignOut}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl font-bold transition-all text-sm"
+              >
+                Cancelar e Sair
+              </button>
+            </div>
           </form>
         </div>
       </div>
