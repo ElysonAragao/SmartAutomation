@@ -13,7 +13,8 @@ import {
   Plus,
   X,
   Check,
-  Power
+  Power,
+  Key
 } from 'lucide-react';
 import mqtt from 'mqtt';
 import { RelayCard } from '@/components/RelayCard';
@@ -374,7 +375,10 @@ export default function Dashboard() {
     client.on('message', (topic, payload) => {
       try {
         const data = JSON.parse(payload.toString());
-        if (data.ip) setDeviceIp(data.ip);
+        if (data.ip) {
+           setDeviceIp(data.ip);
+           localStorage.setItem(`last_device_ip_${deviceId}`, data.ip);
+        }
         if (data.temperatura !== undefined) setTemp(data.temperatura);
         else if (data.value !== undefined) setTemp(data.value);
         
@@ -600,6 +604,19 @@ export default function Dashboard() {
 
   const handleToggle = async (id: number, newState: boolean, seconds?: number) => {
     if (!mqttClient) return;
+    
+    // Fallback: Se não houver conexão com o MQTT ou o dispositivo estiver offline
+    if (!isBrokerConnected || !isDeviceOnline) {
+      const localIP = localStorage.getItem(`last_device_ip_${deviceId}`);
+      if (localIP) {
+        alert("Sem conexão com a nuvem. Abrindo painel de contingência na rede local...");
+        window.open(`http://${localIP}`, '_blank');
+      } else {
+        alert("O dispositivo está offline e não temos um IP local salvo para acesso direto.");
+      }
+      return;
+    }
+
     setLoadingRelayId(id);
     const payload = { id: id, action: newState ? "on" : "off", tempo: seconds || 0 };
     mqttClient.publish(`esp32/${deviceId}/comando/rele`, JSON.stringify(payload));
@@ -611,6 +628,16 @@ export default function Dashboard() {
 
   const handleSetAll = (state: boolean) => {
     if (!mqttClient) return;
+
+    if (!isBrokerConnected || !isDeviceOnline) {
+      const localIP = localStorage.getItem(`last_device_ip_${deviceId}`);
+      if (localIP) {
+        alert("Sem conexão com a nuvem. Abrindo painel de contingência na rede local...");
+        window.open(`http://${localIP}`, '_blank');
+      }
+      return;
+    }
+
     mqttClient.publish(`esp32/${deviceId}/comando/rele`, JSON.stringify({ all: state }));
     setRelays(prev => prev.map(r => ({ ...r, is_on: state })));
   };
@@ -787,7 +814,9 @@ export default function Dashboard() {
             <Calendar className="w-6 h-6" />
           </button>
           <button className="p-3 text-slate-500 hover:text-indigo-400 transition-colors"><History className="w-6 h-6" /></button>
-          <button className="p-3 text-slate-500 hover:text-indigo-400 transition-colors"><Settings className="w-6 h-6" /></button>
+          {userRole === 'master' && (
+            <button className="p-3 text-slate-500 hover:text-indigo-400 transition-colors"><Settings className="w-6 h-6" /></button>
+          )}
         </div>
       </nav>
 
@@ -1097,17 +1126,59 @@ export default function Dashboard() {
                           <span className="font-bold text-white">{u.id}</span>
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${u.role === 'master' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{u.role}</span>
                           {u.role !== 'master' && (
-                            <button 
-                              onClick={async () => {
-                                if (window.confirm(`Deseja realmente excluir o cliente ${u.id}?`)) {
-                                  await deleteDoc(doc(db, 'users', u.id));
-                                }
-                              }}
-                              className="p-1 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors ml-2"
-                              title="Excluir Cliente"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <>
+                              <button 
+                                onClick={async () => {
+                                  if (window.confirm(`Deseja resetar a senha de ${u.id} para 123456?`)) {
+                                    try {
+                                      const res = await fetch('/api/admin/reset-password', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ email: u.id })
+                                      });
+                                      if (!res.ok) {
+                                        const errData = await res.json();
+                                        alert("Erro ao resetar senha: " + errData.error);
+                                      } else {
+                                        alert("Senha resetada para 123456 com sucesso!");
+                                      }
+                                    } catch (error) {
+                                      alert("Erro de comunicação com o servidor.");
+                                    }
+                                  }
+                                }}
+                                className="p-1 rounded-md text-amber-500 hover:bg-amber-500/10 transition-colors ml-2"
+                                title="Resetar Senha"
+                              >
+                                <Key className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={async () => {
+                                  if (window.confirm(`Deseja realmente excluir o cliente ${u.id}?`)) {
+                                    try {
+                                      // Chama a API que apagará do Auth e do Firestore
+                                      const res = await fetch('/api/admin/delete-user', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ email: u.id })
+                                      });
+                                      if (!res.ok) {
+                                        const errData = await res.json();
+                                        alert("Erro ao excluir usuário: " + errData.error);
+                                      } else {
+                                        alert("Cliente excluído completamente com sucesso!");
+                                      }
+                                    } catch (error) {
+                                      alert("Erro de comunicação com o servidor.");
+                                    }
+                                  }
+                                }}
+                                className="p-1 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors ml-1"
+                                title="Excluir Cliente"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
                           )}
                         </div>
                         <p className="text-xs text-slate-500 font-medium">Caixas vinculadas: {u.boxes?.length || 0}</p>
