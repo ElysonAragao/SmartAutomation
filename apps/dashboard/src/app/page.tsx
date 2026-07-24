@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Zap, 
-  Settings, 
-  Calendar, 
-  History, 
-  Thermometer, 
-  Wifi, 
+import {
+  Zap,
+  Settings,
+  Calendar,
+  History,
+  Thermometer,
+  Wifi,
   Globe,
   Trash2,
   Plus,
@@ -21,11 +21,11 @@ import { RelayCard } from '@/components/RelayCard';
 import { db, auth, firebaseConfig } from '@/lib/firebase';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, getAuth as getFirebaseAuth, sendPasswordResetEmail, updatePassword } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  onSnapshot,
+  doc,
+  updateDoc,
   setDoc,
   query,
   orderBy,
@@ -62,8 +62,8 @@ export default function Dashboard() {
   const [isBrokerConnected, setIsBrokerConnected] = useState(false);
   const [isDeviceOnline, setIsDeviceOnline] = useState(false);
   const [loadingRelayId, setLoadingRelayId] = useState<number | null>(null);
-  const [deviceId, setDeviceId] = useState(''); 
-  const [deviceIp, setDeviceIp] = useState('...'); 
+  const [deviceId, setDeviceId] = useState('');
+  const [deviceIp, setDeviceIp] = useState('...');
 
   // Auth & Profile State
   const [user, setUser] = useState<User | null>(null);
@@ -80,7 +80,7 @@ export default function Dashboard() {
   const [confirmPasswordValue, setConfirmPasswordValue] = useState('');
   const [passwordChangeError, setPasswordChangeError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [resetMessage, setResetMessage] = useState<{type: 'success'|'error', msg: string} | null>(null);
+  const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -95,9 +95,9 @@ export default function Dashboard() {
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
-         setResetMessage({ type: 'error', msg: 'E-mail não encontrado na nossa base.' });
+        setResetMessage({ type: 'error', msg: 'E-mail não encontrado na nossa base.' });
       } else {
-         setResetMessage({ type: 'error', msg: 'Erro ao enviar e-mail de recuperação.' });
+        setResetMessage({ type: 'error', msg: 'Erro ao enviar e-mail de recuperação.' });
       }
     }
     setTimeout(() => setResetMessage(null), 5000);
@@ -126,9 +126,9 @@ export default function Dashboard() {
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/requires-recent-login') {
-         setPasswordChangeError('Por motivos de segurança, saia e faça login novamente antes de trocar a senha.');
+        setPasswordChangeError('Por motivos de segurança, saia e faça login novamente antes de trocar a senha.');
       } else {
-         setPasswordChangeError('Erro ao alterar a senha. Tente novamente.');
+        setPasswordChangeError('Erro ao alterar a senha. Tente novamente.');
       }
     } finally {
       setIsChangingPassword(false);
@@ -138,12 +138,14 @@ export default function Dashboard() {
   const [mqttClient, setMqttClient] = useState<any>(null);
 
   // Timers State
-  const [activeTimers, setActiveTimers] = useState<{[key: number]: {
-    type: 'delay_on' | 'on_for' | 'delay_off';
-    timeLeft: number;
-    totalDuration: number;
-    durationY?: number;
-  }}>({});
+  const [activeTimers, setActiveTimers] = useState<{
+    [key: number]: {
+      type: 'delay_on' | 'on_for' | 'delay_off';
+      timeLeft: number;
+      totalDuration: number;
+      durationY?: number;
+    }
+  }>({});
 
   // Weekly Schedules State
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -160,7 +162,7 @@ export default function Dashboard() {
   const [isAddingSchedule, setIsAddingSchedule] = useState(false);
 
   // Track executed schedules to prevent duplicates in the same minute
-  const [executedSchedules, setExecutedSchedules] = useState<{[key: string]: string}>({});
+  const [executedSchedules, setExecutedSchedules] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
     if (!auth) {
@@ -213,7 +215,7 @@ export default function Dashboard() {
   // Fetch User Profile Data
   useEffect(() => {
     if (!db || !user?.email) return;
-    
+
     const userRef = doc(db, 'users', user.email);
     const unsubscribeProfile = onSnapshot(userRef, async (docSnap) => {
       if (docSnap.exists()) {
@@ -221,7 +223,8 @@ export default function Dashboard() {
         setUserRole(data.role || 'client');
         setUserBoxes(data.boxes || []);
         if (data.mustChangePassword) setMustChangePassword(true);
-        
+        setCanAccessIP(!!data.canAccessIP);
+
         // Auto-select first box if none selected
         if (data.boxes && data.boxes.length > 0) {
           setDeviceId(prev => prev === '' || !data.boxes.includes(prev) ? data.boxes[0] : prev);
@@ -243,43 +246,48 @@ export default function Dashboard() {
     return () => unsubscribeProfile();
   }, [user]);
 
+  const [canAccessIP, setCanAccessIP] = useState(false);
+
   // Admin State
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  
+
   // Create Client State
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientPassword, setNewClientPassword] = useState('123456');
   const [newClientBoxes, setNewClientBoxes] = useState('');
+  const [newClientCanAccessIP, setNewClientCanAccessIP] = useState(false);
   const [isCreatingClient, setIsCreatingClient] = useState(false);
-  const [createClientStatus, setCreateClientStatus] = useState<{type: 'error'|'success', msg: string} | null>(null);
+  const [createClientStatus, setCreateClientStatus] = useState<{ type: 'error' | 'success', msg: string } | null>(null);
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClientEmail || !newClientPassword) return;
     setIsCreatingClient(true);
     setCreateClientStatus(null);
-    
+
     try {
       // O "Truque de Ouro": Conexão Secundária
       const secondaryApp = getApps().find(app => app.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
       const secondaryAuth = getFirebaseAuth(secondaryApp);
-      
+
       // Cria o usuário na conta secundária
       await createUserWithEmailAndPassword(secondaryAuth, newClientEmail, newClientPassword);
-      
+
       // Salva o perfil no Firestore
       const boxesArray = newClientBoxes.split(',').map(b => b.trim()).filter(b => b !== '');
       await setDoc(doc(db, 'users', newClientEmail), {
         role: 'client',
         boxes: boxesArray,
         email: newClientEmail,
-        mustChangePassword: true
+        mustChangePassword: true,
+        canAccessIP: newClientCanAccessIP
       });
 
       setCreateClientStatus({ type: 'success', msg: 'Cliente criado com sucesso!' });
       setNewClientEmail('');
       setNewClientBoxes('');
+      setNewClientCanAccessIP(false);
       // Mantém a senha padrão 123456 para o próximo cadastro se quiser
     } catch (err: any) {
       console.error(err);
@@ -290,11 +298,13 @@ export default function Dashboard() {
           role: 'client',
           boxes: boxesArray,
           email: newClientEmail,
-          mustChangePassword: true
+          mustChangePassword: true,
+          canAccessIP: newClientCanAccessIP
         });
         setCreateClientStatus({ type: 'success', msg: 'Perfil do cliente recriado com sucesso!' });
         setNewClientEmail('');
         setNewClientBoxes('');
+        setNewClientCanAccessIP(false);
       } else {
         setCreateClientStatus({ type: 'error', msg: 'Erro ao criar cliente: ' + err.message });
       }
@@ -304,7 +314,7 @@ export default function Dashboard() {
       setTimeout(() => setCreateClientStatus(null), 5000);
     }
   };
-  
+
   useEffect(() => {
     if (!db || userRole !== 'master') return;
     const usersRef = collection(db, 'users');
@@ -315,31 +325,31 @@ export default function Dashboard() {
   }, [userRole]);
 
   useEffect(() => {
-    let unsubscribeFirestore = () => {}; 
+    let unsubscribeFirestore = () => { };
 
     if (db && deviceId && user) {
-       const relaysRef = collection(db, 'boxes', deviceId, 'relays');
-       const q = query(relaysRef, orderBy('id', 'asc'));
-       
-       setRelays(INITIAL_RELAYS);
+      const relaysRef = collection(db, 'boxes', deviceId, 'relays');
+      const q = query(relaysRef, orderBy('id', 'asc'));
 
-       unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-         const data = snapshot.docs.map(doc => ({
-           ...doc.data()
-         })) as any[];
-         
-         setRelays(prev => {
-           return INITIAL_RELAYS.map(initial => {
-             const dbRelay = data.find(d => d.id === initial.id);
-             if (dbRelay) {
-                const current = prev.find(r => r.id === initial.id);
-                return { ...dbRelay, is_on: current ? current.is_on : false };
-             }
-             const current = prev.find(r => r.id === initial.id);
-             return { ...initial, is_on: current ? current.is_on : false };
-           });
-         });
-       });
+      setRelays(INITIAL_RELAYS);
+
+      unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({
+          ...doc.data()
+        })) as any[];
+
+        setRelays(prev => {
+          return INITIAL_RELAYS.map(initial => {
+            const dbRelay = data.find(d => d.id === initial.id);
+            if (dbRelay) {
+              const current = prev.find(r => r.id === initial.id);
+              return { ...dbRelay, is_on: current ? current.is_on : false };
+            }
+            const current = prev.find(r => r.id === initial.id);
+            return { ...initial, is_on: current ? current.is_on : false };
+          });
+        });
+      });
 
     }
 
@@ -363,11 +373,11 @@ export default function Dashboard() {
     client.on('connect', () => {
       console.log(`✅ Conectado ao HiveMQ! Monitorando: ${deviceId}`);
       setIsBrokerConnected(true);
-      
+
       if (deviceId) {
         const statusTopic = `esp32/${deviceId}/status/#`;
         client.subscribe(statusTopic, (err) => {
-           if (!err) console.log(`📡 Inscrito com sucesso em: ${statusTopic}`);
+          if (!err) console.log(`📡 Inscrito com sucesso em: ${statusTopic}`);
         });
       }
     });
@@ -376,19 +386,19 @@ export default function Dashboard() {
       try {
         const data = JSON.parse(payload.toString());
         if (data.ip) {
-           setDeviceIp(data.ip);
-           localStorage.setItem(`last_device_ip_${deviceId}`, data.ip);
+          setDeviceIp(data.ip);
+          localStorage.setItem(`last_device_ip_${deviceId}`, data.ip);
         }
         if (data.temperatura !== undefined) setTemp(data.temperatura);
         else if (data.value !== undefined) setTemp(data.value);
-        
+
         if (data.reles && Array.isArray(data.reles)) {
-            setRelays(prev => prev.map((r, idx) => ({
-                ...r,
-                is_on: data.reles[idx] !== undefined ? data.reles[idx] : r.is_on
-            })));
+          setRelays(prev => prev.map((r, idx) => ({
+            ...r,
+            is_on: data.reles[idx] !== undefined ? data.reles[idx] : r.is_on
+          })));
         } else if (data.is_on !== undefined && data.id) {
-            setRelays(prev => prev.map(r => r.id === data.id ? { ...r, is_on: data.is_on } : r));
+          setRelays(prev => prev.map(r => r.id === data.id ? { ...r, is_on: data.is_on } : r));
         }
         setIsDeviceOnline(true);
       } catch (e) {
@@ -411,7 +421,7 @@ export default function Dashboard() {
       if (client) client.end();
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
-  }, [deviceId]); 
+  }, [deviceId]);
 
   useEffect(() => {
     if (db && deviceId && user) {
@@ -468,7 +478,7 @@ export default function Dashboard() {
   useEffect(() => {
     const checkSchedules = () => {
       if (schedules.length === 0 || !mqttClient || !deviceId) return;
-      
+
       const now = new Date();
       const day = now.getDay();
       const hourMin = now.toTimeString().substring(0, 5);
@@ -604,13 +614,17 @@ export default function Dashboard() {
 
   const handleToggle = async (id: number, newState: boolean, seconds?: number) => {
     if (!mqttClient) return;
-    
+
     // Fallback: Se não houver conexão com o MQTT ou o dispositivo estiver offline
     if (!isBrokerConnected || !isDeviceOnline) {
       const localIP = localStorage.getItem(`last_device_ip_${deviceId}`);
       if (localIP) {
-        alert("Sem conexão com a nuvem. Abrindo painel de contingência na rede local...");
-        window.open(`http://${localIP}`, '_blank');
+        if (userRole === 'master' || canAccessIP) {
+          alert("Sem conexão com a nuvem. Abrindo painel de contingência na rede local...");
+          window.open(`http://${localIP}`, '_blank');
+        } else {
+          alert("Sem conexão com a nuvem e você não tem permissão para acesso local (IP).");
+        }
       } else {
         alert("O dispositivo está offline e não temos um IP local salvo para acesso direto.");
       }
@@ -632,8 +646,12 @@ export default function Dashboard() {
     if (!isBrokerConnected || !isDeviceOnline) {
       const localIP = localStorage.getItem(`last_device_ip_${deviceId}`);
       if (localIP) {
-        alert("Sem conexão com a nuvem. Abrindo painel de contingência na rede local...");
-        window.open(`http://${localIP}`, '_blank');
+        if (userRole === 'master' || canAccessIP) {
+          alert("Sem conexão com a nuvem. Abrindo painel de contingência na rede local...");
+          window.open(`http://${localIP}`, '_blank');
+        } else {
+          alert("Sem conexão com a nuvem e você não tem permissão para acesso local (IP).");
+        }
       }
       return;
     }
@@ -656,7 +674,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
-          
+
           <div className="flex flex-col items-center mb-8">
             <div className="w-16 h-16 bg-indigo-600/20 rounded-2xl flex items-center justify-center mb-6">
               <Zap className="text-indigo-500 w-8 h-8 fill-indigo-500/50" />
@@ -668,8 +686,8 @@ export default function Dashboard() {
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">E-mail</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -679,16 +697,16 @@ export default function Dashboard() {
             </div>
             <div className="relative">
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Senha</label>
-              <input 
-                type={showPassword ? "text" : "password"} 
+              <input
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:bg-slate-900 text-white rounded-xl px-4 py-3 outline-none transition-all font-medium placeholder-slate-600"
                 placeholder="••••••••"
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-[38px] text-slate-500 hover:text-white transition-colors text-sm font-medium"
               >
@@ -697,7 +715,7 @@ export default function Dashboard() {
             </div>
 
             <div className="flex justify-end mt-1">
-              <button 
+              <button
                 type="button"
                 onClick={handleResetPassword}
                 className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
@@ -718,8 +736,8 @@ export default function Dashboard() {
               </div>
             )}
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={isLoggingIn}
               className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
@@ -736,7 +754,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500" />
-          
+
           <div className="flex flex-col items-center mb-8">
             <div className="w-16 h-16 bg-emerald-600/20 rounded-2xl flex items-center justify-center mb-6">
               <Settings className="text-emerald-500 w-8 h-8" />
@@ -748,8 +766,8 @@ export default function Dashboard() {
           <form onSubmit={handleForcePasswordChange} className="space-y-5">
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Nova Senha</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={newPasswordValue}
                 onChange={(e) => setNewPasswordValue(e.target.value)}
                 required
@@ -760,8 +778,8 @@ export default function Dashboard() {
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Confirmar Nova Senha</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={confirmPasswordValue}
                 onChange={(e) => setConfirmPasswordValue(e.target.value)}
                 required
@@ -778,15 +796,15 @@ export default function Dashboard() {
             )}
 
             <div className="pt-2 flex flex-col gap-3">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isChangingPassword}
                 className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isChangingPassword ? 'Salvando...' : 'Salvar Nova Senha e Entrar'}
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={handleSignOut}
                 className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl font-bold transition-all text-sm"
               >
@@ -807,9 +825,9 @@ export default function Dashboard() {
         </div>
         <div className="flex-1 flex flex-col gap-8">
           <button className="p-3 text-indigo-500 bg-indigo-500/10 rounded-xl transition-colors"><Globe className="w-6 h-6" /></button>
-          <button 
-             onClick={() => { setScheduleRelays([]); setIsAddingSchedule(false); setShowScheduleModal(true); }}
-             className="p-3 text-slate-500 hover:text-indigo-400 transition-colors"
+          <button
+            onClick={() => { setScheduleRelays([]); setIsAddingSchedule(false); setShowScheduleModal(true); }}
+            className="p-3 text-slate-500 hover:text-indigo-400 transition-colors"
           >
             <Calendar className="w-6 h-6" />
           </button>
@@ -822,86 +840,90 @@ export default function Dashboard() {
 
       <main className="md:ml-20 p-6 lg:p-12 max-w-7xl mx-auto">
         <header className="flex flex-col gap-8 mb-12">
-            {/* Top Row: Settings & Account */}
-            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end justify-end w-full">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Sua Conta</label>
-                  <div className="flex items-center gap-2">
-                    <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-400">{user.email}</span>
-                      {userRole === 'master' && <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-[9px] font-black uppercase">Master</span>}
-                    </div>
-                    {userRole === 'master' && (
-                      <button onClick={() => setShowAdminModal(true)} className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl hover:bg-indigo-500 hover:text-white transition-all text-xs font-bold" title="Painel Master"><Settings className="w-4 h-4"/></button>
-                    )}
-                    <button onClick={handleSignOut} className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all text-xs font-bold">SAIR</button>
-                  </div>
+          {/* Top Row: Settings & Account */}
+          <div className="flex flex-col md:flex-row flex-wrap gap-4 items-end justify-end w-full">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Sua Conta</label>
+              <div className="flex items-center gap-2">
+                <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-400">{user.email}</span>
+                  {userRole === 'master' && <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-[9px] font-black uppercase">Master</span>}
                 </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Caixa Selecionada</label>
-                  <div className="flex items-center gap-2">
-                    {userBoxes.length === 0 ? (
-                       <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800 text-sm font-bold text-slate-500">Nenhuma caixa vinculada</div>
-                    ) : (
-                      <select 
-                        value={deviceId}
-                        onChange={(e) => {
-                          setDeviceId(e.target.value);
-                          setIsDeviceOnline(false);
-                          setDeviceIp('...');
-                        }}
-                        className="px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-sm font-bold text-indigo-400 outline-none appearance-none cursor-pointer pr-10"
-                        style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23818cf8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '12px auto' }}
-                      >
-                        {userBoxes.map(box => (
-                          <option key={box} value={box} className="bg-slate-900 text-white">{box}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-               </div>
-
-               <div className="flex flex-col gap-2">
-                 <label className="text-[10px] text-slate-500 font-bold uppercase ml-1 opacity-0">Espaçamento</label>
-                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/50 border border-slate-800 overflow-hidden relative">
-                    <Globe className="text-blue-500 w-5 h-5" />
-                    <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase">Endereço IP</p>
-                      <a href={`http://${deviceIp}`} target="_blank" rel="noreferrer" className="text-lg font-bold hover:text-blue-400 transition-colors">{deviceIp}</a>
-                    </div>
-                 </div>
-               </div>
+                {userRole === 'master' && (
+                  <button onClick={() => setShowAdminModal(true)} className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-2xl hover:bg-indigo-500 hover:text-white transition-all text-xs font-bold" title="Painel Master"><Settings className="w-4 h-4" /></button>
+                )}
+                <button onClick={handleSignOut} className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all text-xs font-bold">SAIR</button>
+              </div>
             </div>
 
-            {/* Middle Row: Title & Status Cards */}
-            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Caixa Selecionada</label>
+              <div className="flex items-center gap-2">
+                {userBoxes.length === 0 ? (
+                  <div className="px-4 py-2.5 rounded-2xl bg-slate-900/50 border border-slate-800 text-sm font-bold text-slate-500">Nenhuma caixa vinculada</div>
+                ) : (
+                  <select
+                    value={deviceId}
+                    onChange={(e) => {
+                      setDeviceId(e.target.value);
+                      setIsDeviceOnline(false);
+                      setDeviceIp('...');
+                    }}
+                    className="px-4 py-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-sm font-bold text-indigo-400 outline-none appearance-none cursor-pointer pr-10"
+                    style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23818cf8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '12px auto' }}
+                  >
+                    {userBoxes.map(box => (
+                      <option key={box} value={box} className="bg-slate-900 text-white">{box}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] text-slate-500 font-bold uppercase ml-1 opacity-0">Espaçamento</label>
+              <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/50 border border-slate-800 overflow-hidden relative">
+                <Globe className="text-blue-500 w-5 h-5" />
                 <div>
-                  <p className="text-indigo-500 font-bold tracking-widest uppercase text-xs mb-2">Resumo do Sistema</p>
-                  <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">Smart<span className="text-indigo-500">Automation</span></h1>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">Endereço IP</p>
+                  {userRole === 'master' || canAccessIP ? (
+                    <a href={`http://${deviceIp}`} target="_blank" rel="noreferrer" className="text-lg font-bold hover:text-blue-400 transition-colors">{deviceIp}</a>
+                  ) : (
+                    <span className="text-lg font-bold text-slate-400">{deviceIp}</span>
+                  )}
                 </div>
-                
-                <div className="flex flex-wrap gap-4 items-start">
-                   <div className="flex items-center gap-3 px-6 py-4 rounded-3xl bg-slate-900/50 border border-slate-800 overflow-hidden relative h-[76px]">
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 blur-2xl rounded-full" />
-                      <Thermometer className="text-orange-500 w-6 h-6" />
-                      <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase">Temperatura</p>
-                        <p className="text-2xl font-bold">{temp}°C</p>
-                      </div>
-                   </div>
-
-                   <div className="flex flex-col gap-2">
-                     <div className="flex items-center gap-3 px-6 py-3 rounded-3xl bg-slate-900/50 border border-slate-800">
-                        <Wifi className={isDeviceOnline ? "text-emerald-500" : "text-rose-500"} />
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase">Esp32 Status</p>
-                          <p className="text-lg font-bold">{isDeviceOnline ? "Online" : "Offline"}</p>
-                        </div>
-                     </div>
-                   </div>
-                </div>
+              </div>
             </div>
+          </div>
+
+          {/* Middle Row: Title & Status Cards */}
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+            <div>
+              <p className="text-indigo-500 font-bold tracking-widest uppercase text-xs mb-2">Resumo do Sistema</p>
+              <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">Smart<span className="text-indigo-500">Automation</span></h1>
+            </div>
+
+            <div className="flex flex-wrap gap-4 items-start">
+              <div className="flex items-center gap-3 px-6 py-4 rounded-3xl bg-slate-900/50 border border-slate-800 overflow-hidden relative h-[76px]">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 blur-2xl rounded-full" />
+                <Thermometer className="text-orange-500 w-6 h-6" />
+                <div>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">Temperatura</p>
+                  <p className="text-2xl font-bold">{temp}°C</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3 px-6 py-3 rounded-3xl bg-slate-900/50 border border-slate-800">
+                  <Wifi className={isDeviceOnline ? "text-emerald-500" : "text-rose-500"} />
+                  <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">Esp32 Status</p>
+                    <p className="text-lg font-bold">{isDeviceOnline ? "Online" : "Offline"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </header>
 
         {!deviceId ? (
@@ -914,52 +936,52 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-12">
-                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                    <button onClick={() => handleSetAll(true)} className="flex-1 py-6 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 active:scale-95 transition-all">Ligar Geral</button>
-                    <button onClick={() => handleSetAll(false)} className="flex-1 py-6 rounded-3xl bg-slate-900 text-rose-500 border border-rose-500/20 font-black text-xl hover:bg-rose-600 hover:text-white active:scale-95 transition-all">Desligar Geral</button>
-                 </div>
+            <div className="lg:col-span-12">
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <button onClick={() => handleSetAll(true)} className="flex-1 py-6 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 active:scale-95 transition-all">Ligar Geral</button>
+                <button onClick={() => handleSetAll(false)} className="flex-1 py-6 rounded-3xl bg-slate-900 text-rose-500 border border-rose-500/20 font-black text-xl hover:bg-rose-600 hover:text-white active:scale-95 transition-all">Desligar Geral</button>
               </div>
+            </div>
 
-              <div className="lg:col-span-12">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <AnimatePresence>
-                    {relays.map((relay) => (
-                      <RelayCard 
-                        key={relay.id}
-                        id={relay.id}
-                        label={relay.label}
-                        isOn={relay.is_on}
-                        onToggle={handleToggle}
-                        onRename={handleRename}
-                        isLoading={loadingRelayId === relay.id}
-                        activeTimer={activeTimers[relay.id]}
-                        onStartTimer={startTimer}
-                        onCancelTimer={cancelTimer}
-                        onOpenSchedule={(relayId) => {
-                          setSelectedRelayForNewSchedule(relayId);
-                          setScheduleRelays([relayId]);
-                          setScheduleLabel(`Agendar Relé ${relayId}`);
-                          setScheduleTime('18:00');
-                          setScheduleAction('on');
-                          setScheduleDays([1, 2, 3, 4, 5]);
-                          setIsAddingSchedule(true);
-                          setShowScheduleModal(true);
-                        }}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
+            <div className="lg:col-span-12">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <AnimatePresence>
+                  {relays.map((relay) => (
+                    <RelayCard
+                      key={relay.id}
+                      id={relay.id}
+                      label={relay.label}
+                      isOn={relay.is_on}
+                      onToggle={handleToggle}
+                      onRename={handleRename}
+                      isLoading={loadingRelayId === relay.id}
+                      activeTimer={activeTimers[relay.id]}
+                      onStartTimer={startTimer}
+                      onCancelTimer={cancelTimer}
+                      onOpenSchedule={(relayId) => {
+                        setSelectedRelayForNewSchedule(relayId);
+                        setScheduleRelays([relayId]);
+                        setScheduleLabel(`Agendar Relé ${relayId}`);
+                        setScheduleTime('18:00');
+                        setScheduleAction('on');
+                        setScheduleDays([1, 2, 3, 4, 5]);
+                        setIsAddingSchedule(true);
+                        setShowScheduleModal(true);
+                      }}
+                    />
+                  ))}
+                </AnimatePresence>
               </div>
+            </div>
           </div>
         )}
 
         <footer className="mt-24 pt-8 border-t border-slate-800 text-slate-600 text-sm flex flex-col md:flex-row justify-between gap-4">
-            <p>© 2026 SmartAutomation Control Panel</p>
-            <div className="flex gap-8">
-              <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500" /> HiveMQ Broker: connected</span>
-              <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Firestore Realtime: standby</span>
-            </div>
+          <p>© 2026 SmartAutomation Control Panel</p>
+          <div className="flex gap-8">
+            <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500" /> HiveMQ Broker: connected</span>
+            <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Firestore Realtime: standby</span>
+          </div>
         </footer>
       </main>
 
@@ -1066,57 +1088,69 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="mb-6 bg-slate-800/30 border border-slate-800 rounded-2xl p-5">
-                   <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-emerald-500"/> Adicionar Novo Cliente</h3>
-                   
-                   <form onSubmit={handleCreateClient} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                     <div className="md:col-span-4">
-                       <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">E-mail do Cliente</label>
-                       <input 
-                         type="email" 
-                         value={newClientEmail}
-                         onChange={(e) => setNewClientEmail(e.target.value)}
-                         required
-                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
-                         placeholder="cliente@email.com"
-                       />
-                     </div>
-                     <div className="md:col-span-3">
-                       <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Senha Padrão</label>
-                       <input 
-                         type="text" 
-                         value={newClientPassword}
-                         onChange={(e) => setNewClientPassword(e.target.value)}
-                         required
-                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
-                       />
-                     </div>
-                     <div className="md:col-span-3">
-                       <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Caixas (Separe com vírgula)</label>
-                       <input 
-                         type="text" 
-                         value={newClientBoxes}
-                         onChange={(e) => setNewClientBoxes(e.target.value)}
-                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
-                         placeholder="Ex: Cx-0002, Cx-0003"
-                       />
-                     </div>
-                     <div className="md:col-span-2">
-                       <button 
-                         type="submit" 
-                         disabled={isCreatingClient}
-                         className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center disabled:opacity-50"
-                       >
-                         {isCreatingClient ? 'Criando...' : 'Cadastrar'}
-                       </button>
-                     </div>
-                   </form>
-                   {createClientStatus && (
-                     <div className={`mt-4 p-3 rounded-xl text-sm font-medium text-center ${createClientStatus.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                       {createClientStatus.msg}
-                     </div>
-                   )}
+                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-emerald-500" /> Adicionar Novo Cliente</h3>
+
+                  <form onSubmit={handleCreateClient} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                    <div className="md:col-span-4">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">E-mail do Cliente</label>
+                      <input
+                        type="email"
+                        value={newClientEmail}
+                        onChange={(e) => setNewClientEmail(e.target.value)}
+                        required
+                        className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                        placeholder="cliente@email.com"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Senha Padrão</label>
+                      <input
+                        type="text"
+                        value={newClientPassword}
+                        onChange={(e) => setNewClientPassword(e.target.value)}
+                        required
+                        className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 ml-1">Caixas (Separe com vírgula)</label>
+                      <input
+                        type="text"
+                        value={newClientBoxes}
+                        onChange={(e) => setNewClientBoxes(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                        placeholder="Ex: Cx-0002, Cx-0003"
+                      />
+                    </div>
+                    <div className="md:col-span-12 flex items-center gap-2 mt-2">
+                      <input 
+                        type="checkbox" 
+                        id="canAccessIP"
+                        checked={newClientCanAccessIP}
+                        onChange={(e) => setNewClientCanAccessIP(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer accent-indigo-500"
+                      />
+                      <label htmlFor="canAccessIP" className="text-xs font-bold text-slate-400 cursor-pointer">
+                        Permitir Acesso ao IP (Painel Offline)
+                      </label>
+                    </div>
+                    <div className="md:col-span-2">
+                      <button
+                        type="submit"
+                        disabled={isCreatingClient}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center disabled:opacity-50"
+                      >
+                        {isCreatingClient ? 'Criando...' : 'Cadastrar'}
+                      </button>
+                    </div>
+                  </form>
+                  {createClientStatus && (
+                    <div className={`mt-4 p-3 rounded-xl text-sm font-medium text-center ${createClientStatus.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                      {createClientStatus.msg}
+                    </div>
+                  )}
                 </div>
-                
+
                 <h3 className="text-sm font-bold text-slate-400 mb-4 px-2 uppercase tracking-widest">Base de Clientes</h3>
                 <div className="space-y-4">
                   {allUsers.map((u) => (
@@ -1126,8 +1160,17 @@ export default function Dashboard() {
                           <span className="font-bold text-white">{u.id}</span>
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${u.role === 'master' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{u.role}</span>
                           {u.role !== 'master' && (
+                            <button
+                              onClick={() => setDoc(doc(db, 'users', u.id), { canAccessIP: !u.canAccessIP }, { merge: true })}
+                              className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ml-2 cursor-pointer transition-colors ${u.canAccessIP ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'}`}
+                              title="Permitir/Bloquear acesso local por IP"
+                            >
+                              IP: {u.canAccessIP ? 'LIBERADO' : 'BLOQUEADO'}
+                            </button>
+                          )}
+                          {u.role !== 'master' && (
                             <>
-                              <button 
+                              <button
                                 onClick={async () => {
                                   if (window.confirm(`Deseja resetar a senha de ${u.id} para 123456?`)) {
                                     try {
@@ -1152,7 +1195,7 @@ export default function Dashboard() {
                               >
                                 <Key className="w-4 h-4" />
                               </button>
-                              <button 
+                              <button
                                 onClick={async () => {
                                   if (window.confirm(`Deseja realmente excluir o cliente ${u.id}?`)) {
                                     try {
@@ -1186,40 +1229,40 @@ export default function Dashboard() {
                       <div className="flex-1 w-full md:w-auto">
                         <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Vincular Nova Caixa</label>
                         <div className="flex flex-wrap gap-2 mb-2">
-                           {u.boxes?.map((box: string) => (
-                             <span key={box} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-2">
-                               {box} 
-                               <button 
-                                 onClick={() => {
-                                   const newBoxes = u.boxes.filter((b: string) => b !== box);
-                                   setDoc(doc(db, 'users', u.id), { boxes: newBoxes }, { merge: true });
-                                 }}
-                                 className="text-rose-500 hover:text-rose-400"><X className="w-3 h-3" />
-                               </button>
-                             </span>
-                           ))}
+                          {u.boxes?.map((box: string) => (
+                            <span key={box} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-2">
+                              {box}
+                              <button
+                                onClick={() => {
+                                  const newBoxes = u.boxes.filter((b: string) => b !== box);
+                                  setDoc(doc(db, 'users', u.id), { boxes: newBoxes }, { merge: true });
+                                }}
+                                className="text-rose-500 hover:text-rose-400"><X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
                         </div>
-                        <form 
-                           className="flex gap-2"
-                           onSubmit={(e) => {
-                             e.preventDefault();
-                             const form = e.currentTarget;
-                             const input = form.elements.namedItem('boxInput') as HTMLInputElement;
-                             const val = input.value.trim();
-                             if (val) {
-                               const currentBoxes = u.boxes || [];
-                               if (!currentBoxes.includes(val)) {
-                                 setDoc(doc(db, 'users', u.id), { boxes: [...currentBoxes, val] }, { merge: true });
-                               }
-                               input.value = '';
-                             }
-                           }}
+                        <form
+                          className="flex gap-2"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = e.currentTarget;
+                            const input = form.elements.namedItem('boxInput') as HTMLInputElement;
+                            const val = input.value.trim();
+                            if (val) {
+                              const currentBoxes = u.boxes || [];
+                              if (!currentBoxes.includes(val)) {
+                                setDoc(doc(db, 'users', u.id), { boxes: [...currentBoxes, val] }, { merge: true });
+                              }
+                              input.value = '';
+                            }
+                          }}
                         >
-                          <input 
-                             name="boxInput"
-                             type="text" 
-                             placeholder="Ex: Cx-0002" 
-                             className="flex-1 min-w-0 bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
+                          <input
+                            name="boxInput"
+                            type="text"
+                            placeholder="Ex: Cx-0002"
+                            className="flex-1 min-w-0 bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none transition-all text-sm font-medium"
                           />
                           <button type="submit" className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs uppercase transition-all shadow-lg shadow-indigo-600/20">
                             Vincular
