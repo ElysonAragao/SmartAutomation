@@ -362,6 +362,8 @@ export default function Dashboard() {
       return () => unsubscribeFirestore();
     }
 
+    setIsDeviceOnline(false); // Reset online status when switching devices
+
     const client = mqtt.connect(mqttUrl, {
       clientId: `nextjs_dash_${Math.random().toString(16).substring(2, 10)}`,
       username: mqttUser,
