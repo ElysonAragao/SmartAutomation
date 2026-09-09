@@ -475,7 +475,7 @@ export default function Dashboard() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [mqttClient, deviceId]);
+  }, [mqttClient, deviceId, isBrokerConnected]);
 
   useEffect(() => {
     const checkSchedules = () => {
@@ -506,7 +506,7 @@ export default function Dashboard() {
 
     const interval = setInterval(checkSchedules, 10000);
     return () => clearInterval(interval);
-  }, [schedules, mqttClient, deviceId, executedSchedules]);
+  }, [schedules, mqttClient, deviceId, executedSchedules, isBrokerConnected]);
 
   const startTimer = (relayId: number, type: 'delay_on' | 'on_for' | 'delay_off', seconds: number) => {
     cancelTimer(relayId);
