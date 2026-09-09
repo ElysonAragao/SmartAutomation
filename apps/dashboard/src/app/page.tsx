@@ -617,8 +617,8 @@ export default function Dashboard() {
   const handleToggle = async (id: number, newState: boolean, seconds?: number) => {
     if (!mqttClient) return;
 
-    // Fallback: Se não houver conexão com o MQTT ou o dispositivo estiver offline
-    if (!isBrokerConnected || !isDeviceOnline) {
+    // Fallback: Se não houver conexão com o MQTT
+    if (!isBrokerConnected) {
       const localIP = localStorage.getItem(`last_device_ip_${deviceId}`);
       if (localIP) {
         if (userRole === 'master' || canAccessIP) {
@@ -645,7 +645,8 @@ export default function Dashboard() {
   const handleSetAll = (state: boolean) => {
     if (!mqttClient) return;
 
-    if (!isBrokerConnected || !isDeviceOnline) {
+    // Fallback: Se não houver conexão com o MQTT
+    if (!isBrokerConnected) {
       const localIP = localStorage.getItem(`last_device_ip_${deviceId}`);
       if (localIP) {
         if (userRole === 'master' || canAccessIP) {

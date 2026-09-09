@@ -28,3 +28,8 @@
 ## 6. Permissões de Interface
 - O botão de "Configurações" (barra lateral) e as opções de gerência foram ocultados de perfis `client`.
 - **Motivo**: Manter a interface enxuta e evitar configurações acidentais pelos usuários finais. A visualização das caixas e IPs permanece, pois os clientes podem possuir múltiplos ambientes (ex: Jardim, Piscina).
+
+## 7. Correção do Bug de Agendamentos (Falso Positivo de Offline)
+- Removida a trava rígida `!isDeviceOnline` no envio de comandos MQTT pelo Dashboard web.
+- **Motivo**: Quando um agendamento ficava muito tempo ocioso aguardando o horário, a placa ESP32 ficava "silenciosa" na rede. O painel web interpretava esse silêncio como "offline" e ativava erroneamente o alerta de Contingência de Rede Local no momento de disparar o comando, bloqueando o envio.
+- **Funcionamento**: Agora, se o painel estiver conectado à nuvem (`isBrokerConnected`), o comando MQTT é enviado de qualquer forma, garantindo que placas silenciosas recebam o gatilho. A contingência de IP local agora só dispara se o próprio painel perder conexão com o servidor MQTT. Isso corrigiu o problema **sem a necessidade de alterar ou atualizar o firmware de nenhuma placa já instalada**.
