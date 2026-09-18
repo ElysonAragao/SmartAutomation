@@ -494,7 +494,9 @@ export default function Dashboard() {
         if (executedSchedules[schedule.id] === execKey) return;
 
         schedule.relayIds.forEach(relayId => {
-          handleToggle(relayId, schedule.action === 'on');
+          // Desativado no front-end: O Vercel Cron Job no backend agora é o responsável por executar as programações
+          // e enviar o MQTT. Isso evita que a ação seja duplicada se você estiver com a tela aberta na hora exata.
+          // handleToggle(relayId, schedule.action === 'on');
         });
 
         setExecutedSchedules(prev => ({
