@@ -147,6 +147,10 @@ export async function GET(request: Request) {
         debugSchedules.push(debugInfo);
       }
 
+    // Pequeno delay para garantir que o socket TCP da Vercel descarregue a mensagem
+    // antes que o container Serverless seja congelado (muito comum em Vercel/AWS Lambda).
+    await new Promise(r => setTimeout(r, 500));
+
     return NextResponse.json({ 
       success: true, 
       message: `Cron finalizado. Tarefas executadas: ${executedCount}. DataBase/Hora: ${execKey}`,
