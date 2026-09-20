@@ -82,7 +82,7 @@ export async function GET(request: Request) {
 
             client.on('connect', async () => {
               // Envia todos os comandos e aguarda a confirmação de envio (QoS 1)
-              const publishPromises = schedule.relayIds.map((relayId) => {
+              const publishPromises = schedule.relayIds.map((relayId: number) => {
                 return new Promise<void>((pubResolve) => {
                   const payload = { 
                     id: relayId, 
