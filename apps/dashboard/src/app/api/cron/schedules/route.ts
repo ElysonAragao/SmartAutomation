@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, collectionGroup } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import mqtt from 'mqtt';
 
@@ -47,19 +47,19 @@ export async function GET(request: Request) {
 
     const debugSchedules: any[] = [];
     
-    // 2. Buscar todas as centrais (boxes)
-    const boxesSnapshot = await getDocs(collection(db, 'boxes'));
+    // 2. Buscar TODOS os schedules de TODAS as centrais de uma só vez (Collection Group)
+    // Isso evita o problema de "phantom documents" onde a central (box) não existe como documento,
+    // mas possui a subcoleção "schedules".
+    const schedulesQuery = collectionGroup(db, 'schedules');
+    const schedulesSnapshot = await getDocs(schedulesQuery);
     
-    for (const boxDoc of boxesSnapshot.docs) {
-      const deviceId = boxDoc.id;
+    for (const scheduleDoc of schedulesSnapshot.docs) {
+      const schedule = scheduleDoc.data();
+      const deviceId = scheduleDoc.ref.parent.parent?.id; // Pega o ID da box pai (ex: Cx-0001)
       
-      // 3. Para cada central, buscar schedules
-      const schedulesRef = collection(db, 'boxes', deviceId, 'schedules');
-      const schedulesSnapshot = await getDocs(schedulesRef);
+      if (!deviceId) continue;
       
-      for (const scheduleDoc of schedulesSnapshot.docs) {
-        const schedule = scheduleDoc.data();
-        const debugInfo: any = { id: scheduleDoc.id, deviceId, schedule, skipReason: 'none' };
+      const debugInfo: any = { id: scheduleDoc.id, deviceId, schedule, skipReason: 'none' };
         
         // 4. Comparar os horários e se está habilitado
         if (!schedule.enabled) {
@@ -146,7 +146,6 @@ export async function GET(request: Request) {
         
         debugSchedules.push(debugInfo);
       }
-    }
 
     return NextResponse.json({ 
       success: true, 
