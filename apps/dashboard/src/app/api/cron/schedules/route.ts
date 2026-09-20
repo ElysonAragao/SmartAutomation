@@ -45,6 +45,8 @@ export async function GET(request: Request) {
 
     let executedCount = 0;
 
+    const debugSchedules: any[] = [];
+    
     // 2. Buscar todas as centrais (boxes)
     const boxesSnapshot = await getDocs(collection(db, 'boxes'));
     
@@ -57,14 +59,31 @@ export async function GET(request: Request) {
       
       for (const scheduleDoc of schedulesSnapshot.docs) {
         const schedule = scheduleDoc.data();
+        const debugInfo: any = { id: scheduleDoc.id, deviceId, schedule, skipReason: 'none' };
         
         // 4. Comparar os horários e se está habilitado
-        if (!schedule.enabled) continue;
-        if (!schedule.days.includes(day)) continue;
-        if (schedule.time !== hourMin) continue;
+        if (!schedule.enabled) {
+          debugInfo.skipReason = 'not_enabled';
+          debugSchedules.push(debugInfo);
+          continue;
+        }
+        if (!schedule.days.includes(day)) {
+          debugInfo.skipReason = 'wrong_day';
+          debugSchedules.push(debugInfo);
+          continue;
+        }
+        if (schedule.time !== hourMin) {
+          debugInfo.skipReason = 'wrong_time';
+          debugSchedules.push(debugInfo);
+          continue;
+        }
         
         // Evita executar duas vezes no mesmo minuto
-        if (schedule.lastExecuted === execKey) continue;
+        if (schedule.lastExecuted === execKey) {
+          debugInfo.skipReason = 'already_executed';
+          debugSchedules.push(debugInfo);
+          continue;
+        }
 
         // 5. Se o horário for o exato, conecta no MQTT e manda o sinal
         const mqttUrl = process.env.NEXT_PUBLIC_MQTT_URL;
@@ -103,8 +122,10 @@ export async function GET(request: Request) {
                   lastExecuted: execKey
                 });
                 executedCount++;
+                debugInfo.executed = true;
               } catch (e) {
                 console.error("Erro ao atualizar lastExecuted no Firebase", e);
+                debugInfo.error = 'firebase_update_failed';
               }
 
               client.end(false, () => {
@@ -114,11 +135,16 @@ export async function GET(request: Request) {
 
             client.on('error', (err) => {
               console.error(`Erro de Conexão MQTT no cron para ${deviceId}:`, err);
+              debugInfo.error = 'mqtt_connection_error';
               client.end();
               resolve(); // Resolve para não travar o loop
             });
           });
+        } else {
+          debugInfo.skipReason = 'missing_mqtt_url';
         }
+        
+        debugSchedules.push(debugInfo);
       }
     }
 
@@ -129,7 +155,8 @@ export async function GET(request: Request) {
       debug: {
         mqttUrlDefined: !!process.env.NEXT_PUBLIC_MQTT_URL,
         hourMin,
-        day
+        day,
+        schedules: debugSchedules
       }
     });
 
