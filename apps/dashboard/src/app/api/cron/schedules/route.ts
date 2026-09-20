@@ -81,14 +81,21 @@ export async function GET(request: Request) {
             });
 
             client.on('connect', async () => {
-              for (const relayId of schedule.relayIds) {
-                const payload = { 
-                  id: relayId, 
-                  action: schedule.action, 
-                  tempo: 0 
-                };
-                client.publish(`esp32/${deviceId}/comando/rele`, JSON.stringify(payload));
-              }
+              // Envia todos os comandos e aguarda a confirmação de envio (QoS 1)
+              const publishPromises = schedule.relayIds.map((relayId) => {
+                return new Promise<void>((pubResolve) => {
+                  const payload = { 
+                    id: relayId, 
+                    action: schedule.action, 
+                    tempo: 0 
+                  };
+                  client.publish(`esp32/${deviceId}/comando/rele`, JSON.stringify(payload), { qos: 1 }, () => {
+                    pubResolve();
+                  });
+                });
+              });
+              
+              await Promise.all(publishPromises);
               
               // 6. Atualizar a flag lastExecuted no Firebase
               try {
@@ -100,8 +107,9 @@ export async function GET(request: Request) {
                 console.error("Erro ao atualizar lastExecuted no Firebase", e);
               }
 
-              client.end();
-              resolve();
+              client.end(false, () => {
+                resolve();
+              });
             });
 
             client.on('error', (err) => {
