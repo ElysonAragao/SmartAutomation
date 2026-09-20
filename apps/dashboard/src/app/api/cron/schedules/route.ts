@@ -125,7 +125,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ 
       success: true, 
       message: `Cron finalizado. Tarefas executadas: ${executedCount}. DataBase/Hora: ${execKey}`,
-      executedCount
+      executedCount,
+      debug: {
+        mqttUrlDefined: !!process.env.NEXT_PUBLIC_MQTT_URL,
+        hourMin,
+        day
+      }
     });
 
   } catch (error: any) {
